@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>MOTUS ENTRENA — Reservas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F3EE; --bg-elev:#FFFFFF; --bg-elev-2:#ECE8DF;
+    --text:#20242B; --muted:#69707C; --muted-2:#9AA0AA;
+    --accent:#2E5C93; --accent-soft:#DCE6F1; --accent-2:#D98F4E;
+    --border:rgba(32,36,43,0.09); --border-strong:rgba(32,36,43,0.18);
+    --ok:#3F8F6B; --ok-soft:#E1F0E8; --warn:#C1583A; --warn-soft:#F6E4DE;
+    --radius:14px; --font-display:'Big Shoulders Display',sans-serif; --font-body:'Inter',sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; display:flex; justify-content:center; }
+  @media(min-width:640px){ body{ background: radial-gradient(circle at 20% 10%, #EAE6DB 0%, var(--bg) 55%); } }
+  #app{ width:100%; max-width:480px; min-height:100vh; position:relative; background:var(--bg); display:flex; flex-direction:column; }
+  @media(min-width:640px){
+    #app{ min-height:auto; margin:32px 0; border-radius:28px; border:1px solid var(--border); box-shadow:0 40px 80px -20px rgba(32,36,43,0.25); overflow:hidden; }
+  }
+  .view{display:none;}
+  .view.active{display:flex; flex-direction:column; flex:1;}
+  .view-enter{animation:viewIn .38s cubic-bezier(.2,.7,.3,1) both;}
+  @keyframes viewIn{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+  .pad{padding:28px 24px 40px;}
+  .topbar{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:18px 20px 4px; }
+  .back-btn{ background:none; border:none; color:var(--muted); font-family:var(--font-body); font-size:15px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 4px; margin-left:-4px; }
+  .back-btn:hover{color:var(--text);}
+  .back-btn svg{width:16px;height:16px;}
+
+  .home-top{padding:52px 28px 0;}
+  .brand{ font-family:var(--font-display); font-weight:700; font-size:clamp(40px, 12vw, 60px); line-height:0.9; letter-spacing:0.5px; color:var(--text); margin:0; }
+  .brand span{color:var(--accent);}
+  .tagline{ font-size:17px; color:var(--accent-2); margin:14px 0 0; font-weight:500; }
+  .lede{ color:var(--muted); font-size:15px; line-height:1.6; margin:22px 0 0; max-width:38ch; }
+  .hero-icons{ display:flex; align-items:center; gap:18px; margin:26px 0 0; }
+  .hero-icons svg{ width:30px; height:30px; color:var(--accent); opacity:0.85; }
+  .hero-icons .hi-plate{color:var(--text); opacity:0.75;}
+  .hero-icons .hi-hand{color:var(--accent-2); opacity:0.9;}
+  .hero-icons .hi-divider{ width:1px; height:22px; background:var(--border-strong); }
+
+  .cta-primary{ display:block; width:100%; background:var(--accent); color:#FFFFFF; border:none; font-family:var(--font-body); font-weight:700; font-size:16px; letter-spacing:0.2px; padding:18px 20px; border-radius:12px; cursor:pointer; margin-top:36px; transition:transform .15s ease, background .15s ease; }
+  .cta-primary:active{transform:scale(0.97);}
+  .cta-primary:hover{background:#254c7a;}
+  .cta-primary:disabled{opacity:0.5; cursor:not-allowed;}
+  .cta-secondary{ display:block; width:100%; background:transparent; color:var(--text); border:1px solid var(--border-strong); font-family:var(--font-body); font-weight:600; font-size:15px; padding:16px 20px; border-radius:12px; cursor:pointer; margin-top:12px; transition:transform .15s ease, border-color .15s ease; }
+  .cta-secondary:active{transform:scale(0.97);}
+  .cta-secondary:hover{border-color:var(--accent-2);}
+  .quick-links{ display:flex; gap:10px; margin-top:14px; }
+  .quick-link{ flex:1; text-align:center; background:var(--bg-elev); border:1px solid var(--border); color:var(--text); font-family:var(--font-body); font-weight:600; font-size:13.5px; padding:13px 8px; border-radius:11px; cursor:pointer; text-decoration:none; }
+  .quick-link:hover{border-color:var(--accent-2);}
+
+  .home-section{ padding:34px 28px 0; }
+  .home-section-title{ font-family:var(--font-display); font-size:22px; font-weight:700; margin:0 0 14px; }
+  .testi-row{ display:flex; gap:12px; overflow-x:auto; margin:0 -28px; padding:2px 28px 8px; }
+  .testi-row::-webkit-scrollbar{display:none;}
+  .testi-card{ flex:0 0 auto; width:230px; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:16px 17px; }
+  .testi-stars{color:var(--accent-2); font-size:13px; letter-spacing:2px; margin-bottom:8px;}
+  .testi-text{ font-size:13.5px; color:var(--text); line-height:1.55; margin:0 0 10px; }
+  .testi-name{ font-size:12.5px; color:var(--muted); font-weight:600; }
+  .foto-row{ display:flex; gap:10px; overflow-x:auto; margin:0 -28px; padding:2px 28px 8px; }
+  .foto-row::-webkit-scrollbar{display:none;}
+  .foto-item{ flex:0 0 auto; width:140px; height:140px; border-radius:var(--radius); overflow:hidden; background:var(--bg-elev-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--muted-2); }
+  .foto-item img{width:100%; height:100%; object-fit:cover;}
+  .foto-item svg{width:28px; height:28px;}
+
+  .plans-row{ display:flex; gap:10px; overflow-x:auto; margin:0 -28px; padding:2px 28px 8px; }
+  .plans-row::-webkit-scrollbar{display:none;}
+  .plan-card{ flex:0 0 auto; width:170px; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
+  .plan-card-name{ font-family:var(--font-display); font-size:19px; font-weight:700; margin:0 0 6px; }
+  .plan-card-desc{ font-size:12.5px; color:var(--muted); line-height:1.5; }
+
+  .info-block{ margin-top:20px; padding:24px 28px 22px; border-top:1px solid var(--border); }
+  .info-row{ display:flex; justify-content:space-between; align-items:baseline; font-size:13.5px; color:var(--muted); padding:6px 0; }
+  .info-row b{color:var(--text); font-weight:600;}
+  .info-link{ display:flex; align-items:center; gap:10px; padding:10px 0; text-decoration:none; color:var(--text); border-bottom:1px solid var(--border); font-size:14px; font-weight:600; }
+  .info-link svg{width:18px; height:18px; color:var(--accent);}
+  .info-link:last-of-type{border-bottom:none;}
+  .policy-note{ font-size:12.5px; color:var(--muted-2); line-height:1.6; margin-top:16px; }
+  .admin-link{ display:inline-block; margin-top:18px; font-size:12.5px; color:var(--muted-2); text-decoration:none; cursor:pointer; border:none; background:none; font-family:var(--font-body); padding:0; }
+  .admin-link:hover{color:var(--muted);}
+
+  .section-eyebrow{ font-size:13px; color:var(--muted); font-weight:500; margin:0 0 4px; }
+  .section-title{ font-family:var(--font-display); font-size:34px; font-weight:700; margin:0 0 22px; line-height:1; }
+
+  .plan-banner{ background:var(--accent-soft); border:1px solid rgba(46,92,147,0.25); border-radius:var(--radius); padding:14px 16px; margin-bottom:18px; }
+  .plan-banner-plan{ font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px; margin:0 0 4px; }
+  .plan-banner-msg{ font-size:13.5px; color:var(--text); line-height:1.45; margin:0; }
+  .plan-banner.blocked{ background:var(--warn-soft); border-color:rgba(193,88,58,0.3); }
+  .plan-banner.blocked .plan-banner-plan{color:var(--warn);}
+
+  .day-chips{ display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; margin:0 -24px; padding-left:24px; padding-right:24px; }
+  .day-chips::-webkit-scrollbar{display:none;}
+  .day-chip{ flex:0 0 auto; background:var(--bg-elev); border:1px solid var(--border); color:var(--muted); font-family:var(--font-body); font-weight:600; font-size:13.5px; padding:12px 16px; border-radius:11px; cursor:pointer; white-space:nowrap; transition:all .15s ease; text-align:center; }
+  .day-chip small{display:block; font-weight:500; font-size:10.5px; opacity:0.75; margin-top:2px;}
+  .day-chip.today{border-color:var(--accent-2);}
+  .day-chip.active{ background:var(--accent); border-color:var(--accent); color:#FFFFFF; }
+
+  .time-list{display:flex; flex-direction:column; gap:10px; margin-top:20px;}
+  .time-card{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; cursor:pointer; transition:border-color .15s ease, transform .1s ease, background .15s ease; }
+  .time-card:hover{border-color:var(--border-strong);}
+  .time-card:active{transform:scale(0.985);}
+  .time-card.selected{ border-color:var(--accent); background:var(--accent-soft); }
+  .time-card .hora{ font-family:var(--font-display); font-size:26px; font-weight:700; }
+  .time-card .cupos{ font-size:13px; font-weight:600; color:var(--ok); text-align:right; }
+  .time-card .cupos small{display:block; font-weight:500; color:var(--muted-2); font-size:11px;}
+  .time-card .cupos.low{color:var(--accent-2);}
+  .time-card .cupos.full{color:var(--muted-2);}
+  .time-card.cerrado{ cursor:not-allowed; opacity:0.5; }
+  .time-card.cerrado:hover{border-color:var(--border);}
+  .empty-note{ color:var(--muted); font-size:14px; margin-top:20px; line-height:1.6; }
+
+  .carrito-bar{ margin-top:20px; background:var(--accent-soft); border:1px solid rgba(46,92,147,0.25); border-radius:var(--radius); padding:16px; }
+  .carrito-bar-title{font-size:13px; font-weight:700; color:var(--accent); margin:0 0 10px;}
+  .carrito-chip{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border-radius:9px; padding:9px 12px; margin-bottom:6px; font-size:13px; }
+  .carrito-chip button{ background:none; border:none; color:var(--warn); font-weight:700; cursor:pointer; padding:2px 6px; font-size:14px; }
+  .carrito-hint{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.5; }
+
+  .form-summary{ background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; margin-bottom:24px; }
+  .form-summary-item{ display:flex; align-items:center; justify-content:space-between; padding:6px 0; }
+  .form-summary-item + .form-summary-item{border-top:1px solid var(--border);}
+  .fs-day{font-size:13px; color:var(--muted); font-weight:500;}
+  .fs-hora{font-family:var(--font-display); font-size:22px; font-weight:700;}
+  .form-identidad{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev-2); border-radius:10px; padding:12px 14px; margin-bottom:20px; font-size:13px; }
+  .form-identidad b{display:block; font-size:14.5px;}
+
+  .field{margin-bottom:16px;}
+  .field label{ display:block; font-size:13px; color:var(--muted); margin-bottom:7px; font-weight:500; }
+  .field input, .field select{ width:100%; background:var(--bg-elev); border:1px solid var(--border-strong); color:var(--text); font-family:var(--font-body); font-size:16px; padding:14px 15px; border-radius:11px; outline:none; transition:border-color .15s ease; }
+  .field input:focus, .field select:focus{border-color:var(--accent);}
+  .form-alert{ background:var(--warn-soft); border:1px solid rgba(193,88,58,0.3); color:var(--warn); font-size:13.5px; padding:12px 14px; border-radius:10px; margin-bottom:16px; display:none; }
+  .form-note{ background:var(--accent-soft); border:1px solid rgba(46,92,147,0.25); color:var(--accent); font-size:13px; padding:12px 14px; border-radius:10px; margin-bottom:16px; line-height:1.5; }
+
+  .amigo-row{ display:flex; gap:8px; margin-bottom:10px; }
+  .amigo-row input{ background:var(--bg-elev); border:1px solid var(--border-strong); color:var(--text); border-radius:10px; padding:11px 12px; font-family:var(--font-body); font-size:14px; flex:1; min-width:0; }
+  .amigo-row button{ background:var(--warn-soft); border:none; color:var(--warn); border-radius:10px; width:40px; flex:0 0 auto; cursor:pointer; }
+  .add-amigo-btn{ width:100%; background:var(--bg-elev-2); border:1px dashed var(--border-strong); color:var(--muted); border-radius:11px; padding:12px; font-size:13.5px; font-weight:600; cursor:pointer; margin-bottom:6px; }
+  .add-amigo-btn:hover{color:var(--text); border-color:var(--accent-2);}
+
+  .confirm-wrap{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:40px 30px; }
+  .check-circle{ width:74px; height:74px; border-radius:50%; border:2px solid var(--ok); display:flex; align-items:center; justify-content:center; margin-bottom:26px; }
+  .check-circle.wait{border-color:var(--accent-2);}
+  .check-circle svg{width:34px; height:34px;}
+  .check-circle path{ stroke:var(--ok); stroke-width:3; fill:none; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:40; stroke-dashoffset:40; animation:draw .5s ease .15s forwards; }
+  .check-circle.wait path{stroke:var(--accent-2);}
+  @keyframes draw{to{stroke-dashoffset:0;}}
+  .confirm-title{ font-family:var(--font-display); font-size:30px; font-weight:700; margin:0 0 12px; }
+  .confirm-text{ color:var(--muted); font-size:15px; line-height:1.6; max-width:34ch; margin:0 0 18px; }
+  .confirm-text b{color:var(--text);}
+  .confirm-list{ text-align:left; width:100%; margin:0 0 26px; }
+  .confirm-list div{ background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin-bottom:7px; font-size:13.5px; display:flex; justify-content:space-between; }
+  .wa-btn{ display:flex; align-items:center; justify-content:center; gap:9px; width:100%; background:#25D366; color:#0b2413; border:none; font-family:var(--font-body); font-weight:700; font-size:15.5px; padding:16px 20px; border-radius:12px; cursor:pointer; text-decoration:none; }
+  .wa-btn svg{width:19px;height:19px;}
+
+  .lookup-wrap{padding:8px 0;}
+  .week-group{margin-bottom:22px;}
+  .week-group-title{ font-family:var(--font-display); font-size:19px; font-weight:700; margin:0 0 10px; color:var(--accent-2); }
+  .week-item{ background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:13px 16px; margin-bottom:8px; }
+  .week-item-head{ display:flex; align-items:center; justify-content:space-between; }
+  .week-item .wi-date{font-size:13.5px; font-weight:600;}
+  .week-item .wi-hora{font-family:var(--font-display); font-size:18px;}
+  .week-item-actions{ display:flex; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+  .badge{ font-size:11px; font-weight:700; padding:4px 9px; border-radius:20px; }
+  .badge-ok{background:var(--ok-soft); color:var(--ok);}
+  .badge-pend{background:var(--accent-soft); color:var(--accent);}
+  .badge-cancel{background:var(--warn-soft); color:var(--warn);}
+
+  .pin-wrap{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:32px 28px; }
+  .pin-wrap .field input{text-align:center; letter-spacing:6px; font-size:22px;}
+
+  .admin-tabs{ display:flex; gap:4px; background:var(--bg-elev); border:1px solid var(--border); border-radius:11px; padding:4px; margin-bottom:22px; overflow-x:auto; }
+  .admin-tab{ flex:1; text-align:center; background:none; border:none; color:var(--muted); font-family:var(--font-body); font-weight:600; font-size:12.5px; padding:10px 6px; border-radius:8px; cursor:pointer; white-space:nowrap; }
+  .admin-tab.active{background:var(--accent); color:#FFFFFF;}
+
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:22px; }
+  .stat-card{ background:var(--bg-elev); border:1px solid var(--border); border-radius:var(--radius); padding:16px; }
+  .stat-num{ font-family:var(--font-display); font-size:30px; font-weight:700; line-height:1; }
+  .stat-label{ font-size:12px; color:var(--muted); margin-top:6px; font-weight:500; }
+  .stat-card.wide{grid-column:1/3;}
+  .dash-block{margin-bottom:24px;}
+  .dash-block-title{ font-family:var(--font-display); font-size:19px; font-weight:700; margin:0 0 10px; }
+  .dash-row{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin-bottom:8px; font-size:13.5px; }
+  .dash-row b{font-weight:700;}
+
+  .admin-day-group{margin-bottom:26px;}
+  .admin-day-title-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .admin-day-title{ font-family:var(--font-display); font-size:20px; font-weight:700; margin:0; color:var(--accent-2); }
+  .day-copy-row{display:flex; gap:6px; align-items:center;}
+  .tiny-btn{ background:var(--bg-elev-2); border:1px solid var(--border-strong); color:var(--muted); border-radius:8px; padding:6px 10px; font-size:11px; font-weight:700; cursor:pointer; font-family:var(--font-body); white-space:nowrap; }
+  .tiny-btn:hover{color:var(--text); border-color:var(--accent-2);}
+  .tiny-btn.accent{background:var(--accent-soft); color:var(--accent); border-color:transparent;}
+  .copy-bar{ display:flex; align-items:center; justify-content:space-between; gap:8px; background:var(--accent-soft); border:1px solid rgba(46,92,147,0.25); border-radius:12px; padding:12px 14px; margin-bottom:18px; font-size:12.5px; color:var(--accent); flex-wrap:wrap; }
+  .copy-bar-actions{display:flex; gap:6px; flex-wrap:wrap;}
+
+  .admin-slot{ background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:13px 15px; margin-bottom:8px; }
+  .admin-slot-head{ display:flex; align-items:center; justify-content:space-between; }
+  .admin-slot-hora{font-family:var(--font-display); font-size:19px; font-weight:700;}
+  .admin-slot-count{font-size:12.5px; color:var(--muted); font-weight:500;}
+  .admin-cupo-edit{ display:flex; align-items:center; gap:8px; }
+  .admin-cupo-edit input{ width:48px; background:var(--bg-elev-2); border:1px solid var(--border-strong); color:var(--text); text-align:center; border-radius:8px; padding:6px 4px; font-family:var(--font-body); font-size:14px; }
+  .icon-btn{ background:none; border:none; color:var(--muted-2); cursor:pointer; padding:6px; border-radius:7px; display:flex; align-items:center; text-decoration:none; }
+  .icon-btn:hover{color:var(--warn); background:rgba(193,88,58,0.08);}
+  .icon-btn svg{width:16px;height:16px;}
+
+  .admin-alumnos{margin-top:10px; padding-top:10px; border-top:1px solid var(--border);}
+  .admin-alumno{ display:flex; align-items:center; justify-content:space-between; font-size:13.5px; padding:6px 0; }
+  .admin-alumno-name{font-weight:500;}
+  .admin-alumno-tel{color:var(--muted); font-size:12px;}
+  .admin-alumno-libre{color:var(--muted-2); font-size:12.5px; font-style:italic; margin:4px 0;}
+
+  .waitlist-box{ margin-top:10px; padding-top:10px; border-top:1px dashed var(--border-strong); }
+  .waitlist-title{font-size:11.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--accent-2); font-weight:700; margin:0 0 6px;}
+  .waitlist-item{ display:flex; align-items:center; justify-content:space-between; font-size:13px; padding:6px 0; gap:8px; }
+  .waitlist-actions{display:flex; gap:4px; flex:0 0 auto;}
+  .mini-btn{ background:var(--accent-soft); color:var(--accent); border:none; border-radius:8px; padding:6px 10px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:var(--font-body); white-space:nowrap; text-decoration:none; display:inline-block; }
+  .mini-btn.ok{background:var(--ok-soft); color:var(--ok);}
+  .mini-btn.warn{background:var(--warn-soft); color:var(--warn);}
+
+  .add-slot-form{ display:flex; gap:8px; margin-top:6px; }
+  .add-slot-form input{ background:var(--bg-elev); border:1px solid var(--border-strong); color:var(--text); border-radius:9px; padding:10px 11px; font-family:var(--font-body); font-size:13.5px; }
+  .add-slot-form input.hora-input{width:80px;}
+  .add-slot-form input.cupo-input{width:56px; text-align:center;}
+  .add-slot-btn{ background:var(--bg-elev-2); border:1px dashed var(--border-strong); color:var(--muted); border-radius:9px; padding:10px 14px; font-size:13px; font-weight:600; cursor:pointer; flex:1; }
+  .add-slot-btn:hover{color:var(--text); border-color:var(--accent-2);}
+  .danger-confirm{background:rgba(193,88,58,0.15) !important; color:var(--warn) !important;}
+
+  .search-box{ display:flex; align-items:center; gap:8px; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:11px; padding:11px 14px; margin-bottom:18px; }
+  .search-box svg{width:16px; height:16px; color:var(--muted-2); flex:0 0 auto;}
+  .search-box input{ border:none; outline:none; background:none; font-family:var(--font-body); font-size:14px; width:100%; color:var(--text); }
+
+  .alumno-edit-row{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .alumno-edit-col{flex:1; min-width:110px;}
+  .alumno-edit-label{font-size:10.5px; color:var(--muted-2); display:block; margin-bottom:3px;}
+  .alumno-edit-row input, .alumno-edit-row select{ width:100%; background:var(--bg-elev-2); border:1px solid var(--border-strong); border-radius:8px; padding:8px 10px; font-size:12.5px; font-family:var(--font-body); color:var(--text); }
+  .plan-usage-badge{ font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; background:var(--ok-soft); color:var(--ok); white-space:nowrap; }
+  .plan-usage-badge.full{background:var(--warn-soft); color:var(--warn);}
+
+  .empty-state{ text-align:center; color:var(--muted); font-size:14px; padding:40px 10px; line-height:1.6; }
+  ::selection{background:var(--accent); color:#FFFFFF;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ======================================================================
+   CONFIGURACIÓN
+   ====================================================================== */
+const CONFIG = {
+  nombreEspacio: "MOTUS ENTRENA",
+  nombreProfesor: "Julián Gazzola",
+  frase: "Tu objetivo, nuestro enfoque",
+  descripcion: "Sesiones uno a uno con seguimiento real. Sin rutinas genéricas ni esperar turno en la máquina: reservá tu horario y entrená con foco.",
+  instagram: "@motus.entrena",
+  whatsapp: "5493412152232",
+  direccion: "San Juan 912, Rosario",
+  adminPin: "2026",
+  cierreAnticipacionHoras: 3,
+  politicaCancelacion: "Podés cancelar o reprogramar tu turno hasta 3 horas antes sin cargo. Pasado ese lapso, avisanos por WhatsApp para liberar el cupo a otro alumno.",
+
+  // Planes de entrenamiento. "perso" no tiene tope fijo: lo define el profesor por alumno.
+  planes: {
+    x2:   { nombre:"MOTUS X2",   clasesPorSemana:2, desc:"Para incorporar el entrenamiento a tu rutina y generar hábitos sostenibles." },
+    x3:   { nombre:"MOTUS X3",   clasesPorSemana:3, desc:"El equilibrio entre frecuencia, progreso y bienestar. El plan más elegido." },
+    full: { nombre:"MOTUS FULL", clasesPorSemana:6, desc:"Para quienes quieren ir más lejos: más constancia, más avances, más resultados." },
+    perso:{ nombre:"MOTUS PERSO", clasesPorSemana:null, desc:"Entrená con tu profesor en un espacio diseñado para vos. Los días por semana los define Julián." },
+  },
+
+  testimonios: [
+    { nombre:"Maru", texto:"Cambié totalmente mi forma de entrenar. Seguimiento real, no una rutina genérica." },
+    { nombre:"Fede", texto:"Lo mejor es la atención personalizada. Se nota que Julián planifica cada sesión." },
+    { nombre:"Cami", texto:"Reservar por acá es re fácil y siempre sé cuántos lugares quedan." },
+  ],
+  fotos: [],
+};
+
+const DIAS = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+const DIAS_ACTIVOS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+
+function horarioDefault(){
+  const base = [
+    { hora:"08:00", cupoMax:3 }, { hora:"09:00", cupoMax:3 }, { hora:"10:00", cupoMax:3 },
+    { hora:"18:00", cupoMax:3 }, { hora:"19:00", cupoMax:3 }, { hora:"20:00", cupoMax:3 },
+  ];
+  const schedule = {};
+  DIAS.forEach(d=> schedule[d] = []);
+  DIAS_ACTIVOS.forEach(d=>{ schedule[d] = base.map(b => ({ id: d+"__"+b.hora, hora:b.hora, cupoMax:b.cupoMax })); });
+  return schedule;
+}
+
+/* ======================================================================
+   FECHAS
+   ====================================================================== */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fechaKey(d){ return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function parseFechaKey(key){ const [y,m,d]=key.split('-').map(Number); return new Date(y,m-1,d); }
+function nombreDiaSemana(d){ return DIAS[d.getDay()]; }
+function hoyKey(){ return fechaKey(new Date()); }
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function labelFecha(d){ const abr=['dom','lun','mar','mié','jue','vie','sáb']; return { top: abr[d.getDay()], bot: pad2(d.getDate())+'/'+pad2(d.getMonth()+1) }; }
+function formatFechaLarga(key){
+  const d = parseFechaKey(key);
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${DIAS[d.getDay()]} ${d.getDate()} de ${meses[d.getMonth()]}`;
+}
+function proximasFechas(n=14){
+  const out=[]; let d = new Date();
+  for(let i=0;i<n;i++){
+    const dia = nombreDiaSemana(d);
+    if((schedule[dia]||[]).length>0) out.push({ key: fechaKey(d), dia, dateObj:new Date(d) });
+    d = addDays(d,1);
+  }
+  return out;
+}
+function slotCerrado(fecha, horaStr){
+  const [y,m,dd] = fecha.split('-').map(Number);
+  const [hh,mm] = horaStr.split(':').map(Number);
+  const slotDate = new Date(y,m-1,dd,hh,mm);
+  const limite = new Date(Date.now() + CONFIG.cierreAnticipacionHoras*3600*1000);
+  return slotDate < limite;
+}
+function inicioSemana(d){ const r=new Date(d); const dow=r.getDay(); const diff = dow===0?-6:1-dow; r.setDate(r.getDate()+diff); r.setHours(0,0,0,0); return r; }
+
+/* ======================================================================
+   ESTADO Y ALMACENAMIENTO
+   ====================================================================== */
+let schedule = null;
+let reservas = null;   // [{id,fecha,dia,horaId,hora,nombre,telefono,dni,estado,ts,grupoId,canceladaTs}]
+let waitlist = null;   // [{id,fecha,dia,horaId,hora,nombre,telefono,dni,ts,estado}]
+let perfiles = null;   // { dni: {nombre,telefono,dni,apodo,fechaNac,plan,clasesPersoPorSemana,creado,actualizado} }
+
+let state = {
+  view:'home',
+  identidad:null,              // {dni,nombre,telefono} — quién está reservando
+  idDni:'', idNombre:'', idTel:'',
+  carrito:[], fechaSel:null, slotSel:null, modoEspera:false, modoModificar:null, limiteMsg:'',
+  amigos:[],
+  buscarDni:'',
+  isAdmin:false, adminTab:'dashboard', filtroAlumno:'',
+  horariosCopiados:null,
+  mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'',
+};
+
+// --- Conexión a Supabase (base de datos real de MOTUS ENTRENA) ---
+const SUPABASE_URL = "https://iipyhuszlvjcjsncelpy.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_836Sk4TLGC2NpCUQH7VZmA_fZ14Mhvg";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function loadData(){
+  const [h, r, w, p] = await Promise.all([
+    sb.from('horarios').select('*'),
+    sb.from('reservas').select('*'),
+    sb.from('waitlist').select('*'),
+    sb.from('perfiles').select('*'),
+  ]);
+  [h,r,w,p].forEach(res=>{ if(res.error) console.error('Supabase error:', res.error); });
+
+  schedule = {}; DIAS.forEach(d=> schedule[d]=[]);
+  (h.data||[]).forEach(x=>{ if(!schedule[x.dia]) schedule[x.dia]=[]; schedule[x.dia].push({ id:x.id, hora:x.hora, cupoMax:x.cupo_max }); });
+  if((h.data||[]).length===0){ schedule = horarioDefault(); await saveSchedule(); }
+
+  reservas = (r.data||[]).map(x=>({ id:x.id, fecha:x.fecha, dia:x.dia, horaId:x.hora_id, hora:x.hora, nombre:x.nombre, telefono:x.telefono, dni:x.dni, estado:x.estado, ts:x.ts, grupoId:x.grupo_id, canceladaTs:x.cancelada_ts }));
+  waitlist = (w.data||[]).map(x=>({ id:x.id, fecha:x.fecha, dia:x.dia, horaId:x.hora_id, hora:x.hora, nombre:x.nombre, telefono:x.telefono, dni:x.dni, ts:x.ts, estado:x.estado }));
+  perfiles = {};
+  (p.data||[]).forEach(x=>{ perfiles[x.dni] = { nombre:x.nombre, telefono:x.telefono, dni:x.dni, apodo:x.apodo||'', fechaNac:x.fecha_nac||'', plan:x.plan||null, clasesPersoPorSemana: x.clases_perso_por_semana??null, creado:x.creado, actualizado:x.actualizado }; });
+}
+
+async function saveSchedule(){
+  const rows = [];
+  DIAS.forEach(dia => (schedule[dia]||[]).forEach(s => rows.push({ id:s.id, dia, hora:s.hora, cupo_max:s.cupoMax })));
+  await sb.from('horarios').delete().neq('id','__none__');
+  if(rows.length) await sb.from('horarios').insert(rows);
+}
+async function saveReservas(){
+  const rows = reservas.map(r=>({ id:r.id, fecha:r.fecha, dia:r.dia, hora_id:r.horaId, hora:r.hora, nombre:r.nombre, telefono:r.telefono, dni:r.dni, estado:r.estado, ts:r.ts, grupo_id:r.grupoId||null, cancelada_ts:r.canceladaTs||null }));
+  if(rows.length) await sb.from('reservas').upsert(rows, { onConflict:'id' });
+}
+async function saveWaitlist(){
+  const rows = waitlist.map(w=>({ id:w.id, fecha:w.fecha, dia:w.dia, hora_id:w.horaId, hora:w.hora, nombre:w.nombre, telefono:w.telefono, dni:w.dni, ts:w.ts, estado:w.estado }));
+  await sb.from('waitlist').delete().neq('id','__none__');
+  if(rows.length) await sb.from('waitlist').insert(rows);
+}
+async function savePerfiles(){
+  const rows = Object.values(perfiles).map(p=>({ dni:p.dni, nombre:p.nombre, telefono:p.telefono, apodo:p.apodo||'', fecha_nac:p.fechaNac||null, plan:p.plan||null, clases_perso_por_semana: p.clasesPersoPorSemana??null, creado: p.creado!==false, actualizado:p.actualizado||Date.now() }));
+  if(rows.length) await sb.from('perfiles').upsert(rows, { onConflict:'dni' });
+}
+function uid(){ return 'r_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+
+/* ======================================================================
+   CÁLCULOS
+   ====================================================================== */
+function cuposOcupados(fecha, horaId){ return reservas.filter(r=>r.fecha===fecha && r.horaId===horaId && r.estado!=='cancelada').length; }
+function cuposLibres(fecha, slot){ return slot.cupoMax - cuposOcupados(fecha, slot.id); }
+function esperaDe(fecha, horaId){ return waitlist.filter(w=>w.fecha===fecha && w.horaId===horaId && w.estado==='esperando'); }
+function ofrecidaDe(fecha, horaId){ return waitlist.filter(w=>w.fecha===fecha && w.horaId===horaId && w.estado==='ofrecida'); }
+function getSlot(dia, id){ if(!dia || !schedule[dia]) return null; return schedule[dia].find(s=>s.id===id) || null; }
+
+function normalizarDni(raw){ return (raw||'').replace(/\D/g,''); }
+function toWaNumber(raw){
+  let d = (raw||'').replace(/\D/g,'');
+  if(d.startsWith('00')) d = d.slice(2);
+  if(d.startsWith('0')) d = d.slice(1);
+  d = d.replace(/^(\d{2,4})15(\d+)$/, '$1$2');
+  if(d.startsWith('549')) return d;
+  if(d.startsWith('54')) return '549'+d.slice(2);
+  return '549'+d;
+}
+function waLink(telefono, mensaje){ return `https://wa.me/${toWaNumber(telefono)}?text=${encodeURIComponent(mensaje)}`; }
+
+function nombrePreferido(nombreCompleto, apodo){
+  if(apodo && apodo.trim()) return apodo.trim();
+  return (nombreCompleto||'').trim().split(/\s+/)[0] || nombreCompleto || '';
+}
+function nombreSaludo(nombreCompleto, dni){ const p = dni && perfiles[dni]; return nombrePreferido(nombreCompleto, p && p.apodo); }
+function mensajeRecordatorio(nombreCompleto, dni){ return `¡Hola ${nombreSaludo(nombreCompleto,dni)}! Te escribimos de ${CONFIG.nombreEspacio} para recordarte que reserves tu próximo entrenamiento 💪. Cualquier consulta, avisanos por acá.`; }
+function mensajeCancelacion(nombreCompleto, dni, fecha, hora){ return `Hola ${nombreSaludo(nombreCompleto,dni)}! Te escribimos de ${CONFIG.nombreEspacio} para avisarte que tuvimos que cancelar tu turno del ${formatFechaLarga(fecha)} a las ${hora}. Cualquier consulta o para reprogramar, contanos por acá.`; }
+function mensajeOfertaEspera(nombreCompleto, dni, fecha, hora){ return `¡Hola ${nombreSaludo(nombreCompleto,dni)}! Se liberó un lugar el ${formatFechaLarga(fecha)} a las ${hora} en ${CONFIG.nombreEspacio} y sos el/la siguiente en la lista de espera. ¿Confirmás que lo tomás? Respondé por acá y te lo reservamos.`; }
+function mensajeCumple(perfil){ return `¡Feliz cumpleaños, ${nombrePreferido(perfil.nombre, perfil.apodo)}! 🎉 Todo el equipo de ${CONFIG.nombreEspacio} te desea un gran día. ¡Nos vemos en el próximo entrenamiento!`; }
+
+async function upsertPerfil(nombre, telefono, dni){
+  const key = normalizarDni(dni);
+  const existente = perfiles[key] || {};
+  perfiles[key] = {
+    nombre: nombre.trim(), telefono: telefono.trim(), dni: key,
+    apodo: existente.apodo || '', fechaNac: existente.fechaNac || '',
+    plan: existente.plan || null, clasesPersoPorSemana: existente.clasesPersoPorSemana || null,
+    creado:true, actualizado: Date.now(),
+  };
+  await savePerfiles();
+  return perfiles[key];
+}
+
+// --- Planes y límite semanal ---
+function limiteSemanal(perfil){
+  if(!perfil || !perfil.plan) return Infinity;
+  if(perfil.plan==='perso') return perfil.clasesPersoPorSemana==null ? Infinity : perfil.clasesPersoPorSemana;
+  return CONFIG.planes[perfil.plan] ? CONFIG.planes[perfil.plan].clasesPorSemana : Infinity;
+}
+function nombrePlan(perfil){
+  if(!perfil || !perfil.plan) return null;
+  return CONFIG.planes[perfil.plan] ? CONFIG.planes[perfil.plan].nombre : perfil.plan;
+}
+function reservasEnSemanaDe(dni, fechaRef, excludeId){
+  const inicio = fechaKey(inicioSemana(parseFechaKey(fechaRef)));
+  const fin = fechaKey(addDays(inicioSemana(parseFechaKey(fechaRef)),6));
+  return reservas.filter(r=> r.dni===dni && r.estado!=='cancelada' && r.fecha>=inicio && r.fecha<=fin && r.id!==excludeId).length;
+}
+function mensajePlanEstado(perfil, fechaRef, excludeId){
+  if(!perfil || !perfil.plan){
+    return { texto:'Todavía no tenés un plan asignado — tu profesor te lo va a asignar pronto. Por ahora podés reservar sin límite.', bloqueado:false, plan:null };
+  }
+  const limite = limiteSemanal(perfil);
+  if(limite===Infinity || limite==null){
+    return { texto:`Plan ${nombrePlan(perfil)} — tu profesor todavía no definió cuántas clases tenés esta semana.`, bloqueado:false, plan:nombrePlan(perfil) };
+  }
+  const usadas = reservasEnSemanaDe(perfil.dni, fechaRef, excludeId);
+  const restantes = limite - usadas;
+  let texto;
+  if(usadas===0) texto = `Tenés disponibles tus ${limite} clases para esta semana.`;
+  else if(restantes>0) texto = `Reservaste ${usadas} de tus ${limite} clases de esta semana. Te quedan ${restantes} disponibles.`;
+  else texto = `Ya reservaste tus ${limite} clases de esta semana según tu plan.`;
+  return { texto, bloqueado: restantes<=0, plan:nombrePlan(perfil), limite, usadas, restantes };
+}
+
+function calcularStats(){
+  const hoy = new Date();
+  const inicioSem = fechaKey(inicioSemana(hoy));
+  const finSem = fechaKey(addDays(inicioSemana(hoy),5));
+  const activas = reservas.filter(r=>r.estado!=='cancelada');
+  const entrenamientosSemana = activas.filter(r=> r.fecha>=inicioSem && r.fecha<=finSem).length;
+
+  let capacidadSemana = 0;
+  DIAS_ACTIVOS.forEach(dia=> (schedule[dia]||[]).forEach(s=> capacidadSemana += s.cupoMax));
+  const ocupacion = capacidadSemana>0 ? Math.round((entrenamientosSemana/capacidadSemana)*100) : 0;
+
+  const hace30 = fechaKey(addDays(hoy,-30));
+  const alumnosActivos = new Set(activas.filter(r=> r.fecha>=hace30).map(r=>r.telefono)).size;
+
+  const canceladas = reservas.filter(r=>r.estado==='cancelada').length;
+  const totalHist = reservas.length;
+  const tasaCancel = totalHist>0 ? Math.round((canceladas/totalHist)*100) : 0;
+
+  const porHora = {};
+  activas.forEach(r=>{ porHora[r.hora] = (porHora[r.hora]||0)+1; });
+  const picos = Object.entries(porHora).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  return { entrenamientosSemana, ocupacion, alumnosActivos, canceladas, tasaCancel, picos, capacidadSemana };
+}
+function huecosLibres(n=8){
+  const out=[];
+  proximasFechas(14).forEach(f=>{
+    (schedule[f.dia]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora)).forEach(s=>{
+      if(slotCerrado(f.key, s.hora)) return;
+      const libres = cuposLibres(f.key, s);
+      if(libres>0) out.push({ fecha:f.key, dia:f.dia, hora:s.hora, libres, max:s.cupoMax });
+    });
+  });
+  return out.slice(0,n);
+}
+function cumpleaniosProximos(){
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const out = [];
+  Object.values(perfiles).forEach(p=>{
+    if(!p.fechaNac) return;
+    const [, m, d] = p.fechaNac.split('-').map(Number);
+    let prox = new Date(hoy.getFullYear(), m-1, d);
+    if(prox < hoy) prox = new Date(hoy.getFullYear()+1, m-1, d);
+    const dias = Math.round((prox-hoy)/86400000);
+    if(dias<=7) out.push({ nombre:p.nombre, telefono:p.telefono, dni:p.dni, apodo:p.apodo, dias, fecha:prox });
+  });
+  return out.sort((a,b)=>a.dias-b.dias);
+}
+
+/* ======================================================================
+   RENDER
+   ====================================================================== */
+const app = document.getElementById('app');
+
+function icon(name){
+  const icons = {
+    back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a1 1 0 011-1h6a1 1 0 011 1v2m2 0v14a1 1 0 01-1 1H6a1 1 0 01-1-1V6h14z"/></svg>',
+    wa: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.1-1.7-.8-2-.9-.3-.1-.5-.1-.6.1-.2.3-.7.9-.9 1.1-.1.2-.3.2-.6.1-.3-.1-1.2-.4-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.1-.3 0-.4.1-.6l.4-.5c.1-.1.2-.3.2-.4.1-.2 0-.3 0-.4-.1-.1-.6-1.4-.8-1.9-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.1 0 1.2.9 2.4 1 2.6.1.2 1.8 2.8 4.4 3.8.6.3 1.1.4 1.5.5.6.2 1.2.2 1.6.1.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2-.1-.1-.2-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.5 15.3L2 22l4.9-1.3A10 10 0 1012 2z"/></svg>',
+    check:'<path d="M4 12l5 5L20 6"/>',
+    pin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    ig: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.6" y2="16.6"/></svg>',
+    users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0113 0"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15 13.2a5.2 5.2 0 016.5 5.1"/></svg>',
+  };
+  return icons[name] || '';
+}
+
+function render(){
+  const v = state.view;
+  let html = '';
+  if(v==='home') html = renderHome();
+  else if(v==='identificar') html = renderIdentificar();
+  else if(v==='dia') html = renderDia();
+  else if(v==='form') html = renderForm();
+  else if(v==='confirmacion') html = renderConfirmacion();
+  else if(v==='miSemana') html = renderMiSemana();
+  else if(v==='adminPin') html = renderAdminPin();
+  else if(v==='admin') html = renderAdmin();
+
+  app.innerHTML = `<div class="view active view-enter">${html}</div>`;
+  bindEvents();
+}
+
+function renderHome(){
+  const partes = CONFIG.nombreEspacio.split(' ');
+  const marca = partes.length>1 ? `<span>${partes[0]}</span> ${partes.slice(1).join(' ')}` : `<span>${CONFIG.nombreEspacio}</span>`;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONFIG.direccion)}`;
+  const igUrl = `https://instagram.com/${CONFIG.instagram.replace('@','')}`;
+  const fotos = CONFIG.fotos.length>0
+    ? CONFIG.fotos.map(f=>`<div class="foto-item"><img src="${f}" alt="Motus Entrena"></div>`).join('')
+    : Array(3).fill(`<div class="foto-item">${icon('users')}</div>`).join('');
+
+  return `
+    <div class="home-top">
+      <h1 class="brand">${marca}</h1>
+      <p class="tagline">${CONFIG.frase}</p>
+      <div class="hero-icons">
+        <svg class="hi-plate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="9" width="3.2" height="6" rx="1"/><rect x="19.3" y="9" width="3.2" height="6" rx="1"/><rect x="4.7" y="7" width="2.6" height="10" rx="1"/><rect x="16.7" y="7" width="2.6" height="10" rx="1"/><line x1="7.3" y1="12" x2="16.7" y2="12"/></svg>
+        <div class="hi-divider"></div>
+        <svg class="hi-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 13V8a2 2 0 014 0"/><path d="M10 13V6a2 2 0 014 0v7"/><path d="M14 13V7a2 2 0 014 0v6"/><path d="M18 13v3a5 5 0 01-5 5h-1a5 5 0 01-4.5-2.8L5 13.5"/></svg>
+      </div>
+      <p class="lede">${CONFIG.descripcion}</p>
+      <button class="cta-primary" id="btnReservar">Reservar entrenamiento</button>
+      <div class="quick-links"><a class="quick-link" id="btnMiSemana">Ver mi semana · ingresar con mi DNI</a></div>
+    </div>
+    <div class="home-section">
+      <h2 class="home-section-title">Nuestros planes</h2>
+      <div class="plans-row">
+        ${Object.values(CONFIG.planes).map(p=>`
+          <div class="plan-card"><p class="plan-card-name">${p.nombre}</p><p class="plan-card-desc">${p.desc}</p></div>`).join('')}
+      </div>
+    </div>
+    <div class="home-section">
+      <h2 class="home-section-title">Lo que dicen los alumnos</h2>
+      <div class="testi-row">
+        ${CONFIG.testimonios.map(t=>`
+          <div class="testi-card">
+            <div class="testi-stars">★★★★★</div>
+            <p class="testi-text">"${escapeHtml(t.texto)}"</p>
+            <div class="testi-name">— ${escapeHtml(t.nombre)}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div class="home-section">
+      <h2 class="home-section-title">El espacio</h2>
+      <div class="foto-row">${fotos}</div>
+    </div>
+    <div class="info-block">
+      <div class="info-row"><span>Profesor</span><b>${CONFIG.nombreProfesor}</b></div>
+      <a class="info-link" href="${mapsUrl}" target="_blank" rel="noopener">${icon('pin')} ${CONFIG.direccion}</a>
+      <a class="info-link" href="${igUrl}" target="_blank" rel="noopener">${icon('ig')} ${CONFIG.instagram}</a>
+      <p class="policy-note"><b>Política de cancelación:</b> ${CONFIG.politicaCancelacion}</p>
+      <button class="admin-link" id="btnAdmin">Panel del profesor</button>
+    </div>
+  `;
+}
+
+function renderIdentificar(){
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">Antes de reservar</p>
+      <h2 class="section-title">¿Quién entrena?</h2>
+      <div class="form-note">Usamos tu DNI para reconocerte y mostrarte cuántas clases te quedan según tu plan.</div>
+      <div class="form-alert" id="idAlert"></div>
+      <div class="field"><label for="inpIdDni">DNI</label><input id="inpIdDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.idDni)}"></div>
+      <div class="field"><label for="inpIdNombre">Nombre y apellido</label><input id="inpIdNombre" type="text" placeholder="Ej: Juana Pérez" value="${escapeHtml(state.idNombre)}"></div>
+      <div class="field"><label for="inpIdTel">WhatsApp</label><input id="inpIdTel" type="tel" placeholder="Ej: 341 555 1234" value="${escapeHtml(state.idTel)}"></div>
+      <button class="cta-primary" id="btnContinuarId">Continuar</button>
+    </div>
+  `;
+}
+
+function renderDia(){
+  const fechas = proximasFechas(14);
+  const chips = fechas.map(f=>{
+    const lb = labelFecha(f.dateObj);
+    const activo = state.fechaSel===f.key;
+    const esHoy = f.key===hoyKey();
+    return `<button class="day-chip ${activo?'active':''} ${esHoy?'today':''}" data-fecha="${f.key}" data-dia="${f.dia}">${lb.top}<small>${lb.bot}</small></button>`;
+  }).join('');
+
+  let banner = '';
+  let lista = '';
+  if(state.fechaSel){
+    const dia = fechas.find(f=>f.key===state.fechaSel)?.dia;
+    const perfil = perfiles[state.identidad.dni];
+    const estado = mensajePlanEstado(perfil, state.fechaSel, state.modoModificar);
+    banner = `
+      <div class="plan-banner ${estado.bloqueado?'blocked':''}">
+        <p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p>
+        <p class="plan-banner-msg">${estado.texto}</p>
+      </div>
+    `;
+    if(state.limiteMsg){
+      banner += `<div class="form-alert" style="display:block;">${state.limiteMsg}</div>`;
+    }
+
+    const slots = (schedule[dia]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
+    if(slots.length===0){
+      lista = `<p class="empty-note">No hay horarios cargados para este día.</p>`;
+    }else{
+      lista = `<div class="time-list">` + slots.map(s=>{
+        const libres = cuposLibres(state.fechaSel, s);
+        const cerrado = slotCerrado(state.fechaSel, s.hora);
+        const full = libres<=0;
+        const enCarrito = state.carrito.some(c=>c.fecha===state.fechaSel && c.horaId===s.id);
+        let cuposTxt;
+        if(cerrado) cuposTxt = `<span class="cupos full">Cierre de reservas</span>`;
+        else if(full) cuposTxt = `<span class="cupos full">COMPLETO<small>${state.modoModificar?'':'anotate en lista de espera'}</small></span>`;
+        else cuposTxt = `<span class="cupos ${libres===1?'low':''}">${enCarrito?'Seleccionado ✓':(libres+' '+(libres===1?'cupo':'cupos'))}<small>${enCarrito?'':'disponible'+(libres===1?'':'s')}</small></span>`;
+        return `
+          <div class="time-card ${cerrado?'cerrado':''} ${enCarrito?'selected':''}" data-slot="${s.id}" data-full="${full}" data-cerrado="${cerrado}">
+            <span class="hora">${s.hora}</span>
+            ${cuposTxt}
+          </div>`;
+      }).join('') + `</div>`;
+    }
+  }
+
+  let carritoHtml = '';
+  if(state.carrito.length>0 && !state.modoModificar){
+    carritoHtml = `
+      <div class="carrito-bar">
+        <p class="carrito-bar-title">Turnos seleccionados (${state.carrito.length})</p>
+        ${state.carrito.map((c,i)=>`
+          <div class="carrito-chip"><span>${formatFechaLarga(c.fecha)} · ${c.hora}</span><button type="button" class="btn-quitar-carrito" data-idx="${i}">✕</button></div>`).join('')}
+        <p class="carrito-hint">¿Querés reservar otro día también? Elegí otra fecha arriba y sumala. Si ya está, continuá con tus datos.</p>
+        <button class="cta-primary" id="btnContinuarCarrito" style="margin-top:10px;">Continuar con mis datos</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">${state.modoModificar ? 'Elegí el nuevo horario' : 'Paso 2 de 3'}</p>
+      <h2 class="section-title">Elegí un día</h2>
+      <div class="day-chips">${chips}</div>
+      ${banner}
+      ${lista}
+      ${carritoHtml}
+    </div>
+  `;
+}
+
+function cuposLibresCarritoItem(item){ const slot = getSlot(item.dia, item.horaId); return slot ? cuposLibres(item.fecha, slot) : 0; }
+
+function renderForm(){
+  const idBox = `
+    <div class="form-identidad">
+      <span>Reservando para<b>${escapeHtml(state.identidad.nombre)}</b></span>
+      <span style="color:var(--muted); font-size:12px;">DNI ${state.identidad.dni}</span>
+    </div>
+  `;
+
+  if(state.modoEspera){
+    const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
+    const slot = getSlot(dia, state.slotSel);
+    return `
+      <div class="topbar"><button class="back-btn" id="btnBack" data-to="dia">${icon('back')} Volver</button></div>
+      <div class="pad">
+        <p class="section-eyebrow">Lista de espera</p>
+        <h2 class="section-title">Confirmá</h2>
+        ${idBox}
+        <div class="form-summary"><div class="form-summary-item"><span class="fs-day">${formatFechaLarga(state.fechaSel)}</span><span class="fs-hora">${slot?slot.hora:''}</span></div></div>
+        <div class="form-note">Este horario está completo. Te anotamos en la lista de espera y avisamos por WhatsApp apenas se libere un lugar.</div>
+        <div class="form-alert" id="formAlert"></div>
+        <button class="cta-primary" id="btnConfirmar">Anotarme en lista de espera</button>
+      </div>
+    `;
+  }
+
+  const amigosHtml = state.amigos.map((a,i)=>`
+    <div class="amigo-row" data-idx="${i}">
+      <input type="text" placeholder="Nombre del amigo/a" class="amigo-nombre" value="${escapeHtml(a.nombre)}" data-idx="${i}">
+      <input type="tel" placeholder="WhatsApp" class="amigo-tel" value="${escapeHtml(a.telefono)}" data-idx="${i}">
+      <button type="button" class="btn-quitar-amigo" data-idx="${i}">✕</button>
+    </div>
+  `).join('');
+  const permiteAmigos = state.carrito.length===1;
+  const libresPrimerTurno = permiteAmigos ? cuposLibresCarritoItem(state.carrito[0]) : 0;
+
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="dia">${icon('back')} Volver</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">Paso 3 de 3</p>
+      <h2 class="section-title">Confirmá</h2>
+      ${idBox}
+      <div class="form-summary">
+        ${state.carrito.map(c=>`<div class="form-summary-item"><span class="fs-day">${formatFechaLarga(c.fecha)}</span><span class="fs-hora">${c.hora}</span></div>`).join('')}
+      </div>
+      <div class="form-alert" id="formAlert"></div>
+      ${permiteAmigos ? `
+        <div class="field">
+          <label>¿Venís con amigos? (opcional, cupos disponibles: ${libresPrimerTurno})</label>
+          ${amigosHtml}
+          ${state.amigos.length < Math.max(0,libresPrimerTurno-1) ? `<button type="button" class="add-amigo-btn" id="btnAgregarAmigo">+ Agregar amigo/a</button>` : ''}
+        </div>` : ''}
+      <button class="cta-primary" id="btnConfirmar">Confirmar reserva${state.carrito.length>1?'s':''}</button>
+    </div>
+  `;
+}
+
+function renderConfirmacion(){
+  const modoEspera = state.modoEspera;
+  let resumen, msgTexto;
+  if(modoEspera){
+    const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
+    const slot = getSlot(dia, state.slotSel);
+    resumen = [{ fecha:state.fechaSel, hora: slot?slot.hora:'' }];
+    msgTexto = `Hola! Quedé anotado en la lista de espera el ${formatFechaLarga(state.fechaSel)} a las ${slot?slot.hora:''} en ${CONFIG.nombreEspacio}.`;
+  }else{
+    resumen = state.carrito;
+    msgTexto = `Hola! Reservé turno en ${CONFIG.nombreEspacio}: ` + resumen.map(r=>`${formatFechaLarga(r.fecha)} ${r.hora}`).join(' / ') + '.';
+  }
+  const msg = encodeURIComponent(msgTexto);
+
+  return `
+    <div class="confirm-wrap">
+      <div class="check-circle ${modoEspera?'wait':''}"><svg viewBox="0 0 24 24">${icon('check')}</svg></div>
+      <h2 class="confirm-title">${modoEspera ? '¡Anotado en la lista! ⏳' : '¡Reserva confirmada! 💪'}</h2>
+      <p class="confirm-text">${modoEspera ? 'Te avisamos por WhatsApp si se libera un lugar:' : 'Te esperamos en:'}</p>
+      <div class="confirm-list">${resumen.map(r=>`<div><span>${formatFechaLarga(r.fecha)}</span><span><b>${r.hora}</b></span></div>`).join('')}</div>
+      <a class="wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${msg}" target="_blank" rel="noopener">${icon('wa')} Escribir por WhatsApp</a>
+      <button class="cta-secondary" id="btnVolverInicio">Volver al inicio</button>
+    </div>
+  `;
+}
+
+function renderMiSemana(){
+  let contenido = '';
+  if(state.buscarDni){
+    const dni = normalizarDni(state.buscarDni);
+    const perfil = perfiles[dni];
+    const mias = reservas.filter(r=> r.dni===dni && r.estado!=='cancelada').sort((a,b)=> a.fecha.localeCompare(b.fecha));
+    const hoy = hoyKey();
+    const pasados = mias.filter(r=>r.fecha<hoy);
+    const futuros = mias.filter(r=>r.fecha>=hoy);
+
+    let plan = '';
+    if(perfil){
+      const estado = mensajePlanEstado(perfil, hoyKey());
+      plan = `<div class="plan-banner"><p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p><p class="plan-banner-msg">${estado.texto}</p></div>`;
+    }
+
+    if(mias.length===0){
+      contenido = plan + `<p class="empty-note">No encontramos reservas con ese DNI. Si es tu primera vez, ¡reservá tu primer entrenamiento!</p>`;
+    }else{
+      contenido = plan + `
+        ${futuros.length>0 ? `
+          <div class="week-group">
+            <h3 class="week-group-title">Próximos turnos</h3>
+            ${futuros.map(r=>`
+              <div class="week-item" data-id="${r.id}">
+                <div class="week-item-head">
+                  <span><span class="wi-date">${formatFechaLarga(r.fecha)}</span><br><span class="wi-hora">${r.hora}</span></span>
+                  <span class="badge badge-pend">Reservado</span>
+                </div>
+                <div class="week-item-actions">
+                  <button class="mini-btn btn-modificar-propia" data-id="${r.id}" style="flex:1;">Modificar</button>
+                  <button class="mini-btn warn btn-cancelar-propia" data-id="${r.id}" style="flex:1;">Cancelar</button>
+                </div>
+              </div>`).join('')}
+          </div>` : ''}
+        ${pasados.length>0 ? `
+          <div class="week-group">
+            <h3 class="week-group-title">Entrenamientos realizados</h3>
+            ${pasados.slice().reverse().map(r=>`
+              <div class="week-item">
+                <div class="week-item-head">
+                  <span><span class="wi-date">${formatFechaLarga(r.fecha)}</span><br><span class="wi-hora">${r.hora}</span></span>
+                  <span class="badge badge-ok">Hecho</span>
+                </div>
+              </div>`).join('')}
+          </div>` : ''}
+      `;
+    }
+  }
+
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">Tu historial</p>
+      <h2 class="section-title">Mi semana</h2>
+      <div class="form-alert" id="miSemanaAlert"></div>
+      <div class="field"><label for="inpBuscarDni">Ingresá tu DNI</label><input id="inpBuscarDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.buscarDni)}"></div>
+      <button class="cta-secondary" id="btnBuscarMiSemana" style="margin-top:0;">Ver mis turnos</button>
+      <div class="lookup-wrap" style="margin-top:24px;">${contenido}</div>
+    </div>
+  `;
+}
+
+function renderAdminPin(){
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
+    <div class="pin-wrap">
+      <p class="section-eyebrow" style="text-align:center">Acceso privado</p>
+      <h2 class="section-title" style="text-align:center">Panel del profesor</h2>
+      <div class="form-alert" id="pinAlert"></div>
+      <div class="field"><input id="inpPin" type="password" inputmode="numeric" placeholder="••••" maxlength="6"></div>
+      <button class="cta-primary" id="btnEntrar">Ingresar</button>
+    </div>
+  `;
+}
+
+function renderAdmin(){
+  const tabs = [['dashboard','Hoy'], ['agenda','Agenda'], ['horarios','Horarios'], ['alumnos','Alumnos']];
+  const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminTab===id?'active':''}" data-tab="${id}">${label}</button>`).join('')}</div>`;
+  let body = '';
+  if(state.adminTab==='dashboard') body = renderAdminDashboard();
+  else if(state.adminTab==='agenda') body = renderAdminAgenda();
+  else if(state.adminTab==='horarios') body = renderAdminHorarios();
+  else body = renderAdminAlumnos();
+
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Salir</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">${CONFIG.nombreProfesor}</p>
+      <h2 class="section-title">Panel</h2>
+      ${tabsHtml}
+      ${body}
+    </div>
+  `;
+}
+
+function renderAdminDashboard(){
+  const stats = calcularStats();
+  const hoy = hoyKey();
+  const diaHoy = nombreDiaSemana(new Date());
+  const slotsHoy = (schedule[diaHoy]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
+  const alumnosHoy = reservas.filter(r=>r.fecha===hoy && r.estado!=='cancelada').length;
+  const cumples = cumpleaniosProximos();
+  const huecos = huecosLibres(6);
+
+  return `
+    <div class="dash-block">
+      <h3 class="dash-block-title">Hoy tenés ${alumnosHoy} alumno${alumnosHoy===1?'':'s'}</h3>
+      ${slotsHoy.length===0 ? `<p class="empty-note">No hay horarios cargados para hoy.</p>` : slotsHoy.map(s=>{
+        const ocup = cuposOcupados(hoy, s.id);
+        return `<div class="dash-row"><span>${s.hora}</span><span><b>${ocup}</b>/${s.cupoMax} alumnos</span></div>`;
+      }).join('')}
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num">${stats.entrenamientosSemana}</div><div class="stat-label">Entrenamientos esta semana</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.ocupacion}%</div><div class="stat-label">Ocupación semanal</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.alumnosActivos}</div><div class="stat-label">Alumnos activos (30 días)</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.tasaCancel}%</div><div class="stat-label">Tasa de cancelación</div></div>
+      <div class="stat-card wide">
+        <div class="stat-label" style="margin-bottom:8px;">Horarios pico</div>
+        ${stats.picos.length===0 ? `<span style="font-size:13px; color:var(--muted);">Todavía sin datos suficientes</span>` :
+          stats.picos.map(([h,c])=>`<span style="display:inline-block; margin-right:14px; font-weight:700;">${h} <span style="color:var(--muted); font-weight:500;">(${c})</span></span>`).join('')}
+      </div>
+    </div>
+    ${cumples.length>0 ? `
+      <div class="dash-block">
+        <h3 class="dash-block-title">🎂 Cumpleaños próximos</h3>
+        ${cumples.map(c=>`
+          <div class="dash-row">
+            <span>${escapeHtml(nombrePreferido(c.nombre,c.apodo))} · ${c.dias===0?'hoy':c.dias===1?'mañana':'en '+c.dias+' días'}</span>
+            <a class="mini-btn ok" href="${waLink(c.telefono, mensajeCumple(c))}" target="_blank" rel="noopener">Saludar</a>
+          </div>`).join('')}
+      </div>` : ''}
+    <div class="dash-block">
+      <h3 class="dash-block-title">Próximos huecos libres</h3>
+      ${huecos.length===0 ? `<p class="empty-note">No hay huecos libres en los próximos 14 días.</p>` : huecos.map(h=>`
+        <div class="dash-row"><span>${formatFechaLarga(h.fecha)} · ${h.hora}</span><span><b>${h.libres}</b>/${h.max} libres</span></div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderAdminAgenda(){
+  const fechas = proximasFechas(14);
+  if(fechas.length===0) return `<div class="empty-state">No hay horarios cargados.</div>`;
+  return fechas.map(f=>{
+    const slots = (schedule[f.dia]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
+    if(slots.length===0) return '';
+    return `
+      <div class="admin-day-group">
+        <h3 class="admin-day-title">${formatFechaLarga(f.key)}</h3>
+        ${slots.map(s=>{
+          const alumnos = reservas.filter(r=>r.fecha===f.key && r.horaId===s.id && r.estado!=='cancelada');
+          const espera = esperaDe(f.key, s.id);
+          const ofrecidas = ofrecidaDe(f.key, s.id);
+          const libres = s.cupoMax - alumnos.length;
+          return `
+            <div class="admin-slot">
+              <div class="admin-slot-head"><span class="admin-slot-hora">${s.hora}</span><span class="admin-slot-count">${alumnos.length}/${s.cupoMax} cupos</span></div>
+              <div class="admin-alumnos">
+                ${alumnos.length===0 ? `<p class="admin-alumno-libre">Sin reservas para este horario</p>` : alumnos.map(a=>{
+                  const apodo = a.dni && perfiles[a.dni] ? perfiles[a.dni].apodo : '';
+                  return `
+                  <div class="admin-alumno" data-reserva="${a.id}">
+                    <span><span class="admin-alumno-name">${escapeHtml(a.nombre)}${apodo?' ('+escapeHtml(apodo)+')':''}</span><br><span class="admin-alumno-tel">${escapeHtml(a.telefono)}</span></span>
+                    <span style="display:flex; gap:2px;">
+                      <a class="icon-btn" href="${waLink(a.telefono, `Hola ${nombreSaludo(a.nombre,a.dni)}! Te escribimos de ${CONFIG.nombreEspacio}.`)}" target="_blank" rel="noopener" title="Escribir por WhatsApp">${icon('wa')}</a>
+                      <button class="icon-btn btn-cancel-reserva" data-id="${a.id}" data-fecha="${f.key}" data-hora="${s.hora}" data-nombre="${escapeHtml(a.nombre)}" data-tel="${escapeHtml(a.telefono)}" data-dni="${a.dni||''}" title="Cancelar reserva">${icon('trash')}</button>
+                    </span>
+                  </div>`;
+                }).join('')}
+              </div>
+              ${(espera.length>0 || ofrecidas.length>0) ? `
+                <div class="waitlist-box">
+                  <p class="waitlist-title">Lista de espera (${espera.length+ofrecidas.length})</p>
+                  ${ofrecidas.map(w=>`
+                    <div class="waitlist-item">
+                      <span>${escapeHtml(w.nombre)} · <span style="color:var(--accent-2); font-weight:600;">oferta enviada</span></span>
+                      <span class="waitlist-actions">
+                        <button class="mini-btn ok btn-confirmar-espera" data-id="${w.id}">Confirmar</button>
+                        <button class="mini-btn warn btn-descartar-espera" data-id="${w.id}">Descartar</button>
+                      </span>
+                    </div>`).join('')}
+                  ${espera.map(w=>`
+                    <div class="waitlist-item">
+                      <span>${escapeHtml(w.nombre)}</span>
+                      <span class="waitlist-actions">${libres>0 ? `<button class="mini-btn btn-ofrecer-espera" data-id="${w.id}">Ofrecer lugar</button>` : `<span style="color:var(--muted-2); font-size:11.5px;">sin cupo</span>`}</span>
+                    </div>`).join('')}
+                </div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAdminHorarios(){
+  const dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+  const copia = state.horariosCopiados;
+  const copyBar = copia ? `
+    <div class="copy-bar">
+      <span>📋 Copiaste los horarios de <b>${copia.origen}</b> (${copia.slots.length})</span>
+      <div class="copy-bar-actions">
+        <button class="tiny-btn accent" id="btnPegarTodos">Aplicar a todos los días</button>
+        <button class="tiny-btn" id="btnDescartarCopia">Descartar</button>
+      </div>
+    </div>` : '';
+
+  return copyBar + dias.map(dia=>{
+    const slots = (schedule[dia]||[]).slice().sort((a,b)=> a.hora.localeCompare(b.hora));
+    return `
+      <div class="admin-day-group">
+        <div class="admin-day-title-row">
+          <h3 class="admin-day-title">${dia}</h3>
+          <div class="day-copy-row">
+            ${slots.length>0 ? `<button class="tiny-btn btn-copiar-horario" data-dia="${dia}">Copiar</button>` : ''}
+            ${copia && copia.origen!==dia ? `<button class="tiny-btn accent btn-pegar-horario" data-dia="${dia}">Pegar acá</button>` : ''}
+          </div>
+        </div>
+        ${slots.length===0 ? `<p class="admin-alumno-libre">Sin horarios cargados</p>` : slots.map(s=>`
+          <div class="admin-slot">
+            <div class="admin-slot-head">
+              <span class="admin-slot-hora">${s.hora}</span>
+              <span class="admin-cupo-edit">
+                <span class="admin-slot-count">máx</span>
+                <input type="number" min="0" value="${s.cupoMax}" class="inp-cupo" data-dia="${dia}" data-id="${s.id}">
+                <button class="icon-btn btn-del-slot" data-dia="${dia}" data-id="${s.id}" title="Eliminar horario">${icon('trash')}</button>
+              </span>
+            </div>
+          </div>`).join('')}
+        <div class="add-slot-form">
+          <input type="text" class="hora-input" placeholder="HH:MM" data-dia="${dia}" id="newHora_${dia}">
+          <input type="number" min="1" value="3" class="cupo-input" data-dia="${dia}" id="newCupo_${dia}">
+          <button class="add-slot-btn btn-add-slot" data-dia="${dia}">+ Agregar horario</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAdminAlumnos(){
+  const filtro = state.filtroAlumno.trim().toLowerCase();
+  let lista = Object.values(perfiles);
+  if(filtro) lista = lista.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.apodo||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro) || (a.telefono||'').includes(filtro));
+
+  const searchBox = `<div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar por nombre, apodo, DNI o teléfono" value="${escapeHtml(state.filtroAlumno)}"></div>`;
+  const opcionesPlan = [['','Sin plan'], ...Object.entries(CONFIG.planes).map(([id,p])=>[id,p.nombre])];
+
+  const bloqueNuevo = state.mostrarNuevoAlumno ? `
+    <div class="admin-slot" style="margin-bottom:14px;">
+      <p class="admin-slot-hora" style="font-size:16px; margin-bottom:10px;">Registrar alumno nuevo</p>
+      <div class="form-alert" id="nuevoAlumnoAlert"></div>
+      <div class="alumno-edit-row" style="margin-top:0;">
+        <div class="alumno-edit-col"><span class="alumno-edit-label">Nombre y apellido</span><input type="text" id="naNombre" value="${escapeHtml(state.naNombre)}" placeholder="Ej: Juana Pérez"></div>
+        <div class="alumno-edit-col"><span class="alumno-edit-label">WhatsApp</span><input type="tel" id="naTel" value="${escapeHtml(state.naTel)}" placeholder="Ej: 341 555 1234"></div>
+      </div>
+      <div class="alumno-edit-row">
+        <div class="alumno-edit-col"><span class="alumno-edit-label">DNI</span><input type="text" inputmode="numeric" id="naDni" value="${escapeHtml(state.naDni)}" placeholder="Ej: 38452109"></div>
+        <div class="alumno-edit-col"><span class="alumno-edit-label">Plan (opcional)</span>
+          <select id="naPlan">${opcionesPlan.map(([id,nom])=>`<option value="${id}" ${state.naPlan===id?'selected':''}>${nom}</option>`).join('')}</select>
+        </div>
+        ${state.naPlan==='perso' ? `<div class="alumno-edit-col"><span class="alumno-edit-label">Clases/semana</span><input type="number" min="0" id="naPerso" value="${escapeHtml(state.naPerso)}" placeholder="Ej: 3"></div>` : ''}
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="add-slot-btn" id="btnGuardarNuevoAlumno" style="flex:1;">Guardar alumno</button>
+        <button class="tiny-btn" id="btnCancelarNuevoAlumno">Cancelar</button>
+      </div>
+    </div>
+  ` : `<button class="add-slot-btn" id="btnMostrarNuevoAlumno" style="margin-bottom:14px;">+ Registrar alumno nuevo</button>`;
+
+  if(Object.values(perfiles).length===0) return `${searchBox}${bloqueNuevo}<div class="empty-state">Todavía no hay alumnos registrados. Registralos manualmente o se crean solos cuando reservan.</div>`;
+  if(lista.length===0) return `${searchBox}${bloqueNuevo}<div class="empty-state">No encontramos alumnos con ese criterio.</div>`;
+
+  return `
+    ${searchBox}
+    ${bloqueNuevo}
+    <div class="admin-slot" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="chkTodos"> Seleccionar todos</label>
+      <button class="add-slot-btn" id="btnRecordarTodos" style="flex:0 0 auto;">Enviar recordatorio</button>
+    </div>
+    <div class="admin-day-group">
+      ${lista.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>{
+        const usadas = a.plan ? reservasEnSemanaDe(a.dni, hoyKey()) : null;
+        const limite = a.plan ? limiteSemanal(a) : null;
+        const badge = a.plan ? `<span class="plan-usage-badge ${limite!==Infinity && usadas>=limite ? 'full':''}">${nombrePlan(a)} · ${usadas}${limite===Infinity||limite==null?'':'/'+limite}</span>` : '';
+        return `
+        <div class="admin-slot">
+          <div class="admin-alumno">
+            <span style="display:flex; align-items:center; gap:10px;">
+              <input type="checkbox" class="chk-alumno" value="${escapeHtml(a.telefono)}" data-nombre="${escapeHtml(a.nombre)}" data-dni="${a.dni}">
+              <span><span class="admin-alumno-name">${escapeHtml(a.nombre)}${a.apodo?' ('+escapeHtml(a.apodo)+')':''}</span><br><span class="admin-alumno-tel">DNI ${a.dni} · ${escapeHtml(a.telefono)}</span></span>
+            </span>
+            <span style="display:flex; align-items:center; gap:6px;">
+              ${badge}
+              <a class="icon-btn" href="${waLink(a.telefono, mensajeRecordatorio(a.nombre, a.dni))}" target="_blank" rel="noopener" title="Enviar recordatorio">${icon('wa')}</a>
+            </span>
+          </div>
+          <div class="alumno-edit-row">
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Apodo</span><input type="text" class="inp-apodo" data-dni="${a.dni}" value="${escapeHtml(a.apodo||'')}" placeholder="Ej: Juani"></div>
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Cumpleaños</span><input type="date" class="inp-fecha-nac" data-dni="${a.dni}" value="${a.fechaNac||''}"></div>
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Plan</span>
+              <select class="sel-plan" data-dni="${a.dni}">${opcionesPlan.map(([id,nom])=>`<option value="${id}" ${a.plan===id||(!a.plan&&id==='')?'selected':''}>${nom}</option>`).join('')}</select>
+            </div>
+            ${a.plan==='perso' ? `<div class="alumno-edit-col"><span class="alumno-edit-label">Clases/semana</span><input type="number" min="0" class="inp-perso" data-dni="${a.dni}" value="${a.clasesPersoPorSemana??''}" placeholder="Ej: 3"></div>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <p class="empty-note">El apodo se usa en los saludos y recordatorios en vez del nombre completo. El plan controla cuántas clases por semana puede reservar cada alumno (para "Perso" definís vos la cantidad, y podés cambiarla cuando quieras).</p>
+  `;
+}
+
+function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str==null?'':str; return d.innerHTML; }
+
+/* ======================================================================
+   EVENTOS
+   ====================================================================== */
+function bindEvents(){
+  const $ = sel => app.querySelector(sel);
+  const $$ = sel => Array.from(app.querySelectorAll(sel));
+
+  const back = $('#btnBack');
+  if(back) back.onclick = ()=>{
+    if(state.modoModificar){ state.modoModificar=null; state.view='miSemana'; render(); return; }
+    state.view = back.dataset.to; render();
+  };
+
+  if(state.view==='home'){
+    $('#btnReservar').onclick = ()=>{
+      state.identidad=null; state.idDni=''; state.idNombre=''; state.idTel='';
+      state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.modoModificar=null;
+      state.carrito=[]; state.amigos=[]; state.limiteMsg='';
+      state.view='identificar'; render();
+    };
+    $('#btnMiSemana').onclick = ()=>{ state.view='miSemana'; render(); };
+    $('#btnAdmin').onclick = ()=>{ state.view='adminPin'; render(); };
+  }
+
+  if(state.view==='identificar'){
+    $('#inpIdDni').oninput = e=>{ state.idDni = e.target.value; };
+    $('#inpIdNombre').oninput = e=>{ state.idNombre = e.target.value; };
+    $('#inpIdTel').oninput = e=>{ state.idTel = e.target.value; };
+    $('#inpIdDni').onblur = async ()=>{
+      const dni = normalizarDni(state.idDni);
+      if(dni.length>=6){
+        await loadData();
+        const p = perfiles[dni];
+        if(p){ state.idNombre = p.nombre; state.idTel = p.telefono; render(); }
+      }
+    };
+    $('#btnContinuarId').onclick = async ()=>{
+      const dni = normalizarDni(state.idDni);
+      const nombre = state.idNombre.trim();
+      const tel = state.idTel.trim();
+      const alertBox = $('#idAlert');
+      if(dni.length<6 || !nombre || !tel){ alertBox.textContent='Completá tu DNI (mínimo 6 dígitos), nombre y WhatsApp.'; alertBox.style.display='block'; return; }
+      await loadData();
+      const perfil = await upsertPerfil(nombre, tel, dni);
+      state.identidad = { dni: perfil.dni, nombre: perfil.nombre, telefono: perfil.telefono };
+      state.view='dia'; render();
+    };
+  }
+
+  if(state.view==='dia'){
+    $$('.day-chip').forEach(chip=>{ chip.onclick = ()=>{ state.fechaSel = chip.dataset.fecha; state.limiteMsg=''; render(); }; });
+
+    $$('.time-card').forEach(card=>{
+      if(card.dataset.cerrado==='true') return;
+      card.onclick = async ()=>{
+        const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
+        const slot = getSlot(dia, card.dataset.slot);
+        const full = card.dataset.full==='true';
+        state.limiteMsg='';
+
+        if(state.modoModificar){
+          if(full){ alert('Ese horario está completo, elegí otro con cupo disponible.'); return; }
+          const r = reservas.find(x=>x.id===state.modoModificar);
+          if(!r) return;
+          if(r.fecha===state.fechaSel && r.horaId===slot.id){ alert('Ya tenés ese turno.'); return; }
+          await loadData();
+          const perfil = perfiles[r.dni];
+          const estado = mensajePlanEstado(perfil, state.fechaSel, r.id);
+          if(estado.bloqueado){ state.limiteMsg = 'No podés mover el turno a esa semana: ya usaste tus clases de ese período según tu plan.'; render(); return; }
+          const slotFresco = getSlot(dia, slot.id);
+          if(cuposLibres(state.fechaSel, slotFresco) <= 0){ alert('Ese horario se completó. Elegí otro.'); render(); return; }
+          const r2 = reservas.find(x=>x.id===state.modoModificar);
+          r2.fecha = state.fechaSel; r2.dia = dia; r2.horaId = slot.id; r2.hora = slot.hora;
+          await saveReservas();
+          state.modoModificar = null; state.view='miSemana'; render();
+          return;
+        }
+
+        if(full){
+          state.slotSel = card.dataset.slot; state.modoEspera = true; state.carrito=[];
+          state.view='form'; render(); return;
+        }
+
+        const yaEnCarrito = state.carrito.some(c=>c.fecha===state.fechaSel && c.horaId===slot.id);
+        if(yaEnCarrito){
+          state.carrito = state.carrito.filter(c=>!(c.fecha===state.fechaSel && c.horaId===slot.id));
+          render();
+          return;
+        }
+
+        await loadData();
+        const perfil = perfiles[state.identidad.dni];
+        const yaEnCarritoMismaSemana = state.carrito.filter(c=>{
+          const inicioA = fechaKey(inicioSemana(parseFechaKey(c.fecha)));
+          const inicioB = fechaKey(inicioSemana(parseFechaKey(state.fechaSel)));
+          return inicioA===inicioB;
+        }).length;
+        const usadasPrevias = reservasEnSemanaDe(state.identidad.dni, state.fechaSel);
+        const limite = limiteSemanal(perfil);
+        if(limite!==Infinity && (usadasPrevias + yaEnCarritoMismaSemana + 1) > limite){
+          state.limiteMsg = `Ya reservaste (o seleccionaste) tus ${limite} clases de esta semana según tu plan${perfil&&perfil.plan?' '+nombrePlan(perfil):''}. Elegí otra semana o hablá con tu profesor.`;
+          render();
+          return;
+        }
+
+        state.carrito.push({ fecha:state.fechaSel, dia, horaId:slot.id, hora:slot.hora });
+        render();
+      };
+    });
+
+    $$('.btn-quitar-carrito').forEach(btn=> btn.onclick = ()=>{ state.carrito.splice(+btn.dataset.idx,1); render(); });
+    const btnContinuar = $('#btnContinuarCarrito');
+    if(btnContinuar) btnContinuar.onclick = ()=>{ state.modoEspera=false; state.amigos=[]; state.view='form'; render(); };
+  }
+
+  if(state.view==='form'){
+    const btnAgregar = $('#btnAgregarAmigo');
+    if(btnAgregar) btnAgregar.onclick = ()=>{ state.amigos.push({nombre:'',telefono:''}); render(); };
+    $$('.amigo-nombre').forEach(inp=> inp.oninput = e=>{ state.amigos[+e.target.dataset.idx].nombre = e.target.value; });
+    $$('.amigo-tel').forEach(inp=> inp.oninput = e=>{ state.amigos[+e.target.dataset.idx].telefono = e.target.value; });
+    $$('.btn-quitar-amigo').forEach(btn=> btn.onclick = ()=>{ state.amigos.splice(+btn.dataset.idx,1); render(); });
+
+    $('#btnConfirmar').onclick = async ()=>{
+      const alertBox = $('#formAlert');
+      await loadData();
+      const { dni, nombre, telefono } = state.identidad;
+
+      if(state.modoEspera){
+        const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
+        const slot = getSlot(dia, state.slotSel);
+        if(!slot){ alertBox.textContent='Ese horario ya no existe.'; alertBox.style.display='block'; return; }
+        waitlist.push({ id:uid(), fecha:state.fechaSel, dia, horaId:slot.id, hora:slot.hora, nombre, telefono, dni, ts:Date.now(), estado:'esperando' });
+        await saveWaitlist();
+        state.view='confirmacion'; render();
+        return;
+      }
+
+      if(state.carrito.length===0){ alertBox.textContent='Elegí al menos un horario.'; alertBox.style.display='block'; return; }
+
+      // re-chequeo defensivo del límite semanal por si cambió algo entre pasos
+      const perfil = perfiles[dni];
+      const semanasEnCarrito = {};
+      for(const item of state.carrito){
+        const semanaKey = fechaKey(inicioSemana(parseFechaKey(item.fecha)));
+        semanasEnCarrito[semanaKey] = (semanasEnCarrito[semanaKey]||0)+1;
+      }
+      const limite = limiteSemanal(perfil);
+      if(limite!==Infinity){
+        for(const semanaKey of Object.keys(semanasEnCarrito)){
+          const usadas = reservasEnSemanaDe(dni, semanaKey);
+          if(usadas + semanasEnCarrito[semanaKey] > limite){
+            alertBox.textContent = `Según tu plan, ya no tenés cupo para todas las clases seleccionadas esa semana. Volvé y ajustá tu selección.`;
+            alertBox.style.display='block';
+            return;
+          }
+        }
+      }
+
+      const amigosValidos = state.carrito.length===1 ? state.amigos.filter(a=>a.nombre.trim() && a.telefono.trim()) : [];
+      for(const item of state.carrito){
+        const slot = getSlot(item.dia, item.horaId);
+        const necesarios = 1 + amigosValidos.length;
+        if(!slot || cuposLibres(item.fecha, slot) < necesarios){
+          alertBox.textContent = `El turno del ${formatFechaLarga(item.fecha)} a las ${item.hora} ya no tiene cupo suficiente. Volvé y ajustalo.`;
+          alertBox.style.display='block';
+          return;
+        }
+      }
+
+      const grupoId = amigosValidos.length>0 ? uid() : null;
+      state.carrito.forEach(item=>{
+        reservas.push({ id:uid(), fecha:item.fecha, dia:item.dia, horaId:item.horaId, hora:item.hora, nombre, telefono, dni, estado:'confirmada', ts:Date.now(), grupoId });
+        amigosValidos.forEach(a=>{
+          reservas.push({ id:uid(), fecha:item.fecha, dia:item.dia, horaId:item.horaId, hora:item.hora, nombre:a.nombre.trim(), telefono:a.telefono.trim(), dni:null, estado:'confirmada', ts:Date.now(), grupoId });
+        });
+      });
+      await saveReservas();
+      state.view='confirmacion'; render();
+    };
+  }
+
+  if(state.view==='confirmacion'){
+    $('#btnVolverInicio').onclick = ()=>{ state.view='home'; state.identidad=null; state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.carrito=[]; state.amigos=[]; render(); };
+  }
+
+  if(state.view==='miSemana'){
+    $('#inpBuscarDni').oninput = e=>{ state.buscarDni = e.target.value; };
+    $('#btnBuscarMiSemana').onclick = async ()=>{
+      if(normalizarDni(state.buscarDni).length<6){ const a=$('#miSemanaAlert'); a.textContent='Ingresá un DNI válido.'; a.style.display='block'; return; }
+      await loadData(); render();
+    };
+    $$('.btn-cancelar-propia').forEach(btn=>{
+      btn.onclick = async ()=>{
+        if(btn.dataset.armed==='1'){
+          const r = reservas.find(x=>x.id===btn.dataset.id);
+          if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); }
+          await saveReservas();
+          render();
+        }else{
+          $$('.btn-cancelar-propia').forEach(b=>{b.dataset.armed='0'; b.textContent='Cancelar';});
+          btn.dataset.armed='1'; btn.textContent='¿Seguro? Tocá de nuevo';
+        }
+      };
+    });
+    $$('.btn-modificar-propia').forEach(btn=>{
+      btn.onclick = ()=>{
+        const r = reservas.find(x=>x.id===btn.dataset.id);
+        if(!r) return;
+        state.identidad = { dni:r.dni, nombre:r.nombre, telefono:r.telefono };
+        state.modoModificar = r.id;
+        state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.carrito=[]; state.limiteMsg='';
+        state.view='dia'; render();
+      };
+    });
+  }
+
+  if(state.view==='adminPin'){
+    const tryEnter = ()=>{
+      const val = $('#inpPin').value.trim();
+      if(val === CONFIG.adminPin){ state.isAdmin=true; state.view='admin'; state.adminTab='dashboard'; render(); }
+      else{ const a=$('#pinAlert'); a.textContent='PIN incorrecto.'; a.style.display='block'; }
+    };
+    $('#btnEntrar').onclick = tryEnter;
+    $('#inpPin').addEventListener('keydown', e=>{ if(e.key==='Enter') tryEnter(); });
+  }
+
+  if(state.view==='admin'){
+    $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; await loadData(); render(); });
+
+    if(state.adminTab==='agenda'){
+      $$('.btn-cancel-reserva').forEach(btn=>{
+        btn.onclick = async ()=>{
+          if(btn.dataset.armed==='1'){
+            const { id, fecha, hora, nombre, tel, dni } = btn.dataset;
+            window.open(waLink(tel, mensajeCancelacion(nombre, dni||null, fecha, hora)), '_blank');
+            const r = reservas.find(x=>x.id===id);
+            if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); }
+            await saveReservas();
+            render();
+          }else{
+            $$('.btn-cancel-reserva').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm');});
+            btn.dataset.armed='1'; btn.classList.add('danger-confirm'); btn.title='Tocá de nuevo para confirmar';
+          }
+        };
+      });
+      $$('.btn-ofrecer-espera').forEach(btn=>{
+        btn.onclick = ()=>{
+          const w = waitlist.find(x=>x.id===btn.dataset.id);
+          if(!w) return;
+          window.open(waLink(w.telefono, mensajeOfertaEspera(w.nombre, w.dni, w.fecha, w.hora)), '_blank');
+          w.estado='ofrecida'; w.ofrecidaTs=Date.now();
+          saveWaitlist().then(render);
+        };
+      });
+      $$('.btn-confirmar-espera').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const w = waitlist.find(x=>x.id===btn.dataset.id);
+          if(!w) return;
+          const dia = nombreDiaSemana(parseFechaKey(w.fecha));
+          const slot = getSlot(dia, w.horaId);
+          if(!slot || cuposLibres(w.fecha, slot) <= 0){ alert('Ya no hay cupo disponible para asignarle.'); return; }
+          reservas.push({ id:uid(), fecha:w.fecha, dia, horaId:w.horaId, hora:w.hora, nombre:w.nombre, telefono:w.telefono, dni:w.dni||null, estado:'confirmada', ts:Date.now(), grupoId:null });
+          waitlist = waitlist.filter(x=>x.id!==w.id);
+          await saveReservas(); await saveWaitlist();
+          render();
+        };
+      });
+      $$('.btn-descartar-espera').forEach(btn=>{
+        btn.onclick = async ()=>{ waitlist = waitlist.filter(x=>x.id!==btn.dataset.id); await saveWaitlist(); render(); };
+      });
+    }
+
+    if(state.adminTab==='horarios'){
+      $$('.inp-cupo').forEach(inp=>{
+        inp.onchange = async ()=>{
+          const slot = getSlot(inp.dataset.dia, inp.dataset.id);
+          if(slot){ slot.cupoMax = Math.max(0, parseInt(inp.value)||0); await saveSchedule(); render(); }
+        };
+      });
+      $$('.btn-del-slot').forEach(btn=>{
+        btn.onclick = async ()=>{
+          if(btn.dataset.armed==='1'){
+            const dia = btn.dataset.dia, id = btn.dataset.id;
+            reservas.forEach(r=>{ if(r.dia===dia && r.horaId===id && r.estado!=='cancelada'){ r.estado='cancelada'; r.canceladaTs=Date.now(); } });
+            waitlist = waitlist.filter(w=> !(w.dia===dia && w.horaId===id));
+            schedule[dia] = schedule[dia].filter(s=>s.id!==id);
+            await saveSchedule(); await saveReservas(); await saveWaitlist();
+            render();
+          }else{
+            $$('.btn-del-slot').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm');});
+            btn.dataset.armed='1'; btn.classList.add('danger-confirm'); btn.title='Tocá de nuevo para confirmar';
+          }
+        };
+      });
+      $$('.btn-add-slot').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const dia = btn.dataset.dia;
+          const horaEl = document.getElementById('newHora_'+dia);
+          const cupoEl = document.getElementById('newCupo_'+dia);
+          const hora = (horaEl.value||'').trim();
+          const cupo = Math.max(1, parseInt(cupoEl.value)||1);
+          if(!/^([01]\d|2[0-3]):([0-5]\d)$/.test(hora)){ horaEl.style.borderColor='var(--warn)'; horaEl.placeholder='Formato HH:MM'; return; }
+          const id = dia+'__'+hora;
+          if(!schedule[dia]) schedule[dia]=[];
+          if(schedule[dia].some(s=>s.id===id)) return;
+          schedule[dia].push({ id, hora, cupoMax: cupo });
+          await saveSchedule();
+          render();
+        };
+      });
+      $$('.btn-copiar-horario').forEach(btn=>{
+        btn.onclick = ()=>{ state.horariosCopiados = { origen: btn.dataset.dia, slots: (schedule[btn.dataset.dia]||[]).map(s=>({hora:s.hora, cupoMax:s.cupoMax})) }; render(); };
+      });
+      $$('.btn-pegar-horario').forEach(btn=>{ btn.onclick = async ()=>{ await pegarHorariosEn(btn.dataset.dia); render(); }; });
+      const btnPegarTodos = $('#btnPegarTodos');
+      if(btnPegarTodos) btnPegarTodos.onclick = async ()=>{
+        const dias = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
+        for(const dia of dias){ if(dia!==state.horariosCopiados.origen) await pegarHorariosEn(dia); }
+        render();
+      };
+      const btnDescartarCopia = $('#btnDescartarCopia');
+      if(btnDescartarCopia) btnDescartarCopia.onclick = ()=>{ state.horariosCopiados=null; render(); };
+    }
+
+    if(state.adminTab==='alumnos'){
+      const btnMostrarNuevo = $('#btnMostrarNuevoAlumno');
+      if(btnMostrarNuevo) btnMostrarNuevo.onclick = ()=>{ state.mostrarNuevoAlumno=true; state.naNombre=''; state.naTel=''; state.naDni=''; state.naPlan=''; state.naPerso=''; render(); };
+      const btnCancelarNuevo = $('#btnCancelarNuevoAlumno');
+      if(btnCancelarNuevo) btnCancelarNuevo.onclick = ()=>{ state.mostrarNuevoAlumno=false; render(); };
+      const naNombreEl = $('#naNombre'); if(naNombreEl) naNombreEl.oninput = e=>{ state.naNombre = e.target.value; };
+      const naTelEl = $('#naTel'); if(naTelEl) naTelEl.oninput = e=>{ state.naTel = e.target.value; };
+      const naDniEl = $('#naDni'); if(naDniEl) naDniEl.oninput = e=>{ state.naDni = e.target.value; };
+      const naPlanEl = $('#naPlan'); if(naPlanEl) naPlanEl.onchange = e=>{ state.naPlan = e.target.value; render(); };
+      const naPersoEl = $('#naPerso'); if(naPersoEl) naPersoEl.oninput = e=>{ state.naPerso = e.target.value; };
+      const btnGuardarNuevo = $('#btnGuardarNuevoAlumno');
+      if(btnGuardarNuevo) btnGuardarNuevo.onclick = async ()=>{
+        const alertBox = $('#nuevoAlumnoAlert');
+        const dni = normalizarDni(state.naDni);
+        const nombre = state.naNombre.trim();
+        const tel = state.naTel.trim();
+        if(dni.length<6 || !nombre || !tel){ alertBox.textContent='Completá nombre, WhatsApp y DNI (mínimo 6 dígitos).'; alertBox.style.display='block'; return; }
+        await loadData();
+        if(perfiles[dni]){ alertBox.textContent=`Ya existe un alumno con ese DNI: ${perfiles[dni].nombre}. Buscalo arriba para editarlo.`; alertBox.style.display='block'; return; }
+        perfiles[dni] = {
+          nombre, telefono: tel, dni, apodo:'', fechaNac:'',
+          plan: state.naPlan || null,
+          clasesPersoPorSemana: state.naPlan==='perso' ? (state.naPerso==='' ? null : Math.max(0, parseInt(state.naPerso)||0)) : null,
+          creado:true, actualizado:Date.now(),
+        };
+        await savePerfiles();
+        state.mostrarNuevoAlumno=false;
+        render();
+      };
+
+      const buscar = $('#inpBuscarAlumno');
+      if(buscar) buscar.oninput = e=>{ state.filtroAlumno = e.target.value; render(); };
+      const chkTodos = $('#chkTodos');
+      if(chkTodos) chkTodos.onchange = ()=>{ $$('.chk-alumno').forEach(c=> c.checked = chkTodos.checked); };
+      const btnTodos = $('#btnRecordarTodos');
+      if(btnTodos) btnTodos.onclick = ()=>{
+        const seleccionados = $$('.chk-alumno').filter(c=>c.checked);
+        if(seleccionados.length===0){ alert('Seleccioná al menos un alumno.'); return; }
+        seleccionados.forEach((c,i)=>{ setTimeout(()=>{ window.open(waLink(c.value, mensajeRecordatorio(c.dataset.nombre, c.dataset.dni)), '_blank'); }, i*350); });
+      };
+      $$('.inp-apodo').forEach(inp=>{ inp.onchange = async ()=>{ if(perfiles[inp.dataset.dni]){ perfiles[inp.dataset.dni].apodo = inp.value.trim(); await savePerfiles(); render(); } }; });
+      $$('.inp-fecha-nac').forEach(inp=>{ inp.onchange = async ()=>{ if(perfiles[inp.dataset.dni]){ perfiles[inp.dataset.dni].fechaNac = inp.value; await savePerfiles(); render(); } }; });
+      $$('.sel-plan').forEach(sel=>{
+        sel.onchange = async ()=>{
+          if(perfiles[sel.dataset.dni]){
+            perfiles[sel.dataset.dni].plan = sel.value || null;
+            await savePerfiles();
+            render();
+          }
+        };
+      });
+      $$('.inp-perso').forEach(inp=>{
+        inp.onchange = async ()=>{
+          if(perfiles[inp.dataset.dni]){
+            perfiles[inp.dataset.dni].clasesPersoPorSemana = inp.value==='' ? null : Math.max(0, parseInt(inp.value)||0);
+            await savePerfiles();
+            render();
+          }
+        };
+      });
+    }
+  }
+}
+
+async function pegarHorariosEn(diaDestino){
+  const copia = state.horariosCopiados;
+  if(!copia) return;
+  const nuevosSlots = copia.slots.map(s=>({ id: diaDestino+"__"+s.hora, hora:s.hora, cupoMax:s.cupoMax }));
+  const nuevosIds = new Set(nuevosSlots.map(s=>s.id));
+  const idsViejos = (schedule[diaDestino]||[]).map(s=>s.id).filter(id=>!nuevosIds.has(id));
+  reservas.forEach(r=>{ if(r.dia===diaDestino && idsViejos.includes(r.horaId) && r.estado!=='cancelada'){ r.estado='cancelada'; r.canceladaTs=Date.now(); } });
+  waitlist = waitlist.filter(w=> !(w.dia===diaDestino && idsViejos.includes(w.horaId)));
+  schedule[diaDestino] = nuevosSlots;
+  await saveSchedule(); await saveReservas(); await saveWaitlist();
+}
+
+/* ======================================================================
+   INIT
+   ====================================================================== */
+(async function init(){
+  app.innerHTML = `<div class="pad" style="padding-top:60px;color:var(--muted);text-align:center;">Cargando…</div>`;
+  await loadData();
+  render();
+})();
+</script>
+</body>
+</html>
