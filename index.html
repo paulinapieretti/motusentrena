@@ -241,6 +241,24 @@
   .plan-usage-badge.full{background:var(--warn-soft); color:var(--warn);}
 
   .empty-state{ text-align:center; color:var(--muted); font-size:14px; padding:40px 10px; line-height:1.6; }
+
+  .comprobante-thumb{ width:64px; height:64px; border-radius:8px; object-fit:cover; border:1px solid var(--border); cursor:pointer; }
+  .comprobante-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .progreso-day{ background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:11px 14px; margin-bottom:8px; }
+  .progreso-ex{ display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:3px 0; gap:8px; }
+  .cumplio-badge{ font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+  .cumplio-badge.si{background:var(--ok-soft); color:var(--ok);}
+  .cumplio-badge.no{background:var(--warn-soft); color:var(--warn);}
+  .cumplio-badge.extra{background:var(--accent-soft); color:var(--accent);}
+  .rutina-dia{ background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .rutina-dia-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .ejercicio-row{ display:flex; gap:6px; margin-bottom:6px; align-items:center; flex-wrap:wrap; }
+  .ejercicio-row input{ background:var(--bg-elev-2); border:1px solid var(--border-strong); border-radius:8px; padding:7px 9px; font-size:12.5px; font-family:var(--font-body); color:var(--text); }
+  .ejercicio-row input.ej-nombre{flex:2; min-width:100px;}
+  .ejercicio-row input.ej-num{width:52px; text-align:center;}
+  .grupo-row{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:12px 15px; margin-bottom:8px; }
+  .alumno-nombre-link{ background:none; border:none; padding:0; cursor:pointer; text-align:left; font-family:var(--font-body); }
+  .alumno-nombre-link:hover .admin-alumno-name{color:var(--accent);}
   ::selection{background:var(--accent); color:#FFFFFF;}
 </style>
 </head>
@@ -331,20 +349,32 @@ function inicioSemana(d){ const r=new Date(d); const dow=r.getDay(); const diff 
    ESTADO Y ALMACENAMIENTO
    ====================================================================== */
 let schedule = null;
-let reservas = null;   // [{id,fecha,dia,horaId,hora,nombre,telefono,dni,estado,ts,grupoId,canceladaTs}]
+let reservas = null;   // [{id,fecha,dia,horaId,hora,nombre,telefono,dni,estado,ts,grupoId,canceladaTs,asistio,asistioTs}]
 let waitlist = null;   // [{id,fecha,dia,horaId,hora,nombre,telefono,dni,ts,estado}]
-let perfiles = null;   // { dni: {nombre,telefono,dni,apodo,fechaNac,plan,clasesPersoPorSemana,creado,actualizado} }
+let perfiles = null;   // { dni: {nombre,telefono,dni,apodo,fechaNac,plan,clasesPersoPorSemana,grupoId,creado,actualizado} }
+let comprobantes = [];   // [{id,dni,url,subidoPor,ts}]
+let testimonios = [];    // [{id,dni,nombreMostrado,texto,ts}]
+let grupos = [];         // [{id,nombre}]
+let rutinaDias = [];     // [{id,dni,grupoId,nombreDia,orden}]
+let rutinaEjercicios = []; // [{id,rutinaDiaId,nombre,series,repeticiones,peso,orden}]
+let registros = [];      // [{id,dni,fecha,ejercicio,series,repeticiones,peso,esExtra,rutinaEjercicioId,ts}]
 
 let state = {
   view:'home',
   identidad:null,              // {dni,nombre,telefono} — quién está reservando
-  idDni:'', idNombre:'', idTel:'',
+  idDni:'', idNombre:'', idTel:'', idNecesitaDatos:false,
   carrito:[], fechaSel:null, slotSel:null, modoEspera:false, modoModificar:null, limiteMsg:'',
   amigos:[],
   buscarDni:'',
   isAdmin:false, adminTab:'dashboard', filtroAlumno:'',
   horariosCopiados:null,
   mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'',
+  mostrarNuevoGrupo:false, ngNombre:'',
+  adminAlumnoDni:null, adminAlumnoTab:'pagos',
+  adminGrupoId:null,
+  rutinaCopiada:null,
+  testiDni:'', testiTexto:'', testiPerfil:undefined,
+  registroFecha:'', registroDiaId:'', registroValores:{}, registroExtra:[],
 };
 
 // --- Conexión a Supabase (base de datos real de MOTUS ENTRENA) ---
@@ -353,22 +383,39 @@ const SUPABASE_ANON_KEY = "sb_publishable_836Sk4TLGC2NpCUQH7VZmA_fZ14Mhvg";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function loadData(){
-  const [h, r, w, p] = await Promise.all([
+  const [h, r, w, p, cf, cp, ts, gr, rd, re, rg] = await Promise.all([
     sb.from('horarios').select('*'),
     sb.from('reservas').select('*'),
     sb.from('waitlist').select('*'),
     sb.from('perfiles').select('*'),
+    sb.from('config_sitio').select('*').eq('id',1).maybeSingle(),
+    sb.from('comprobantes').select('*'),
+    sb.from('testimonios').select('*'),
+    sb.from('grupos').select('*'),
+    sb.from('rutina_dias').select('*'),
+    sb.from('rutina_ejercicios').select('*'),
+    sb.from('registros').select('*'),
   ]);
-  [h,r,w,p].forEach(res=>{ if(res.error) console.error('Supabase error:', res.error); });
+  [h,r,w,p,cf,cp,ts,gr,rd,re,rg].forEach(res=>{ if(res.error) console.error('Supabase error:', res.error); });
 
   schedule = {}; DIAS.forEach(d=> schedule[d]=[]);
   (h.data||[]).forEach(x=>{ if(!schedule[x.dia]) schedule[x.dia]=[]; schedule[x.dia].push({ id:x.id, hora:x.hora, cupoMax:x.cupo_max }); });
   if((h.data||[]).length===0){ schedule = horarioDefault(); await saveSchedule(); }
 
-  reservas = (r.data||[]).map(x=>({ id:x.id, fecha:x.fecha, dia:x.dia, horaId:x.hora_id, hora:x.hora, nombre:x.nombre, telefono:x.telefono, dni:x.dni, estado:x.estado, ts:x.ts, grupoId:x.grupo_id, canceladaTs:x.cancelada_ts }));
+  reservas = (r.data||[]).map(x=>({ id:x.id, fecha:x.fecha, dia:x.dia, horaId:x.hora_id, hora:x.hora, nombre:x.nombre, telefono:x.telefono, dni:x.dni, estado:x.estado, ts:x.ts, grupoId:x.grupo_id, canceladaTs:x.cancelada_ts, asistio:x.asistio, asistioTs:x.asistio_ts }));
   waitlist = (w.data||[]).map(x=>({ id:x.id, fecha:x.fecha, dia:x.dia, horaId:x.hora_id, hora:x.hora, nombre:x.nombre, telefono:x.telefono, dni:x.dni, ts:x.ts, estado:x.estado }));
   perfiles = {};
-  (p.data||[]).forEach(x=>{ perfiles[x.dni] = { nombre:x.nombre, telefono:x.telefono, dni:x.dni, apodo:x.apodo||'', fechaNac:x.fecha_nac||'', plan:x.plan||null, clasesPersoPorSemana: x.clases_perso_por_semana??null, creado:x.creado, actualizado:x.actualizado }; });
+  (p.data||[]).forEach(x=>{ perfiles[x.dni] = { nombre:x.nombre, telefono:x.telefono, dni:x.dni, apodo:x.apodo||'', fechaNac:x.fecha_nac||'', plan:x.plan||null, clasesPersoPorSemana: x.clases_perso_por_semana??null, grupoId:x.grupo_id||null, creado:x.creado, actualizado:x.actualizado }; });
+
+  if(cf.data && cf.data.data){ Object.assign(CONFIG, cf.data.data); }
+  else{ await sb.from('config_sitio').insert({ id:1, data: CONFIG }); }
+
+  comprobantes = (cp.data||[]).map(x=>({ id:x.id, dni:x.dni, url:x.url, subidoPor:x.subido_por, ts:x.ts }));
+  testimonios = (ts.data||[]).map(x=>({ id:x.id, dni:x.dni, nombreMostrado:x.nombre_mostrado, texto:x.texto, ts:x.ts }));
+  grupos = (gr.data||[]).map(x=>({ id:x.id, nombre:x.nombre }));
+  rutinaDias = (rd.data||[]).map(x=>({ id:x.id, dni:x.dni, grupoId:x.grupo_id, nombreDia:x.nombre_dia, orden:x.orden }));
+  rutinaEjercicios = (re.data||[]).map(x=>({ id:x.id, rutinaDiaId:x.rutina_dia_id, nombre:x.nombre, series:x.series, repeticiones:x.repeticiones, peso:x.peso, orden:x.orden }));
+  registros = (rg.data||[]).map(x=>({ id:x.id, dni:x.dni, fecha:x.fecha, ejercicio:x.ejercicio, series:x.series, repeticiones:x.repeticiones, peso:x.peso, esExtra:x.es_extra, rutinaEjercicioId:x.rutina_ejercicio_id, ts:x.ts }));
 }
 
 async function saveSchedule(){
@@ -378,7 +425,7 @@ async function saveSchedule(){
   if(rows.length) await sb.from('horarios').insert(rows);
 }
 async function saveReservas(){
-  const rows = reservas.map(r=>({ id:r.id, fecha:r.fecha, dia:r.dia, hora_id:r.horaId, hora:r.hora, nombre:r.nombre, telefono:r.telefono, dni:r.dni, estado:r.estado, ts:r.ts, grupo_id:r.grupoId||null, cancelada_ts:r.canceladaTs||null }));
+  const rows = reservas.map(r=>({ id:r.id, fecha:r.fecha, dia:r.dia, hora_id:r.horaId, hora:r.hora, nombre:r.nombre, telefono:r.telefono, dni:r.dni, estado:r.estado, ts:r.ts, grupo_id:r.grupoId||null, cancelada_ts:r.canceladaTs||null, asistio: r.asistio===undefined?null:r.asistio, asistio_ts:r.asistioTs||null }));
   if(rows.length) await sb.from('reservas').upsert(rows, { onConflict:'id' });
 }
 async function saveWaitlist(){
@@ -387,9 +434,114 @@ async function saveWaitlist(){
   if(rows.length) await sb.from('waitlist').insert(rows);
 }
 async function savePerfiles(){
-  const rows = Object.values(perfiles).map(p=>({ dni:p.dni, nombre:p.nombre, telefono:p.telefono, apodo:p.apodo||'', fecha_nac:p.fechaNac||null, plan:p.plan||null, clases_perso_por_semana: p.clasesPersoPorSemana??null, creado: p.creado!==false, actualizado:p.actualizado||Date.now() }));
+  const rows = Object.values(perfiles).map(p=>({ dni:p.dni, nombre:p.nombre, telefono:p.telefono, apodo:p.apodo||'', fecha_nac:p.fechaNac||null, plan:p.plan||null, clases_perso_por_semana: p.clasesPersoPorSemana??null, grupo_id:p.grupoId||null, creado: p.creado!==false, actualizado:p.actualizado||Date.now() }));
   if(rows.length) await sb.from('perfiles').upsert(rows, { onConflict:'dni' });
 }
+async function saveConfig(){ await sb.from('config_sitio').upsert({ id:1, data: CONFIG }); }
+
+// --- Comprobantes de pago ---
+async function subirComprobante(file, dni, subidoPor){
+  const path = `${dni}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+  const { error } = await sb.storage.from('comprobantes').upload(path, file);
+  if(error){ alert('No se pudo subir la imagen: '+error.message); return null; }
+  const { data } = sb.storage.from('comprobantes').getPublicUrl(path);
+  const row = { id:uid(), dni, url:data.publicUrl, subido_por:subidoPor, ts:Date.now() };
+  await sb.from('comprobantes').insert(row);
+  comprobantes.push({ id:row.id, dni, url:row.url, subidoPor, ts:row.ts });
+  return row;
+}
+function comprobantesDe(dni){ return comprobantes.filter(c=>c.dni===dni).sort((a,b)=>b.ts-a.ts); }
+
+// --- Fotos de portada ---
+async function subirFotoPortada(file){
+  const path = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+  const { error } = await sb.storage.from('portada').upload(path, file);
+  if(error){ alert('No se pudo subir la imagen: '+error.message); return; }
+  const { data } = sb.storage.from('portada').getPublicUrl(path);
+  CONFIG.fotos.push(data.publicUrl);
+  await saveConfig();
+}
+
+// --- Testimonios ---
+async function agregarTestimonio(dni, nombreMostrado, texto){
+  const row = { id:uid(), dni, nombre_mostrado:nombreMostrado, texto, ts:Date.now() };
+  await sb.from('testimonios').insert(row);
+  testimonios.push({ id:row.id, dni, nombreMostrado, texto, ts:row.ts });
+}
+async function borrarTestimonio(id){
+  await sb.from('testimonios').delete().eq('id', id);
+  testimonios = testimonios.filter(t=>t.id!==id);
+}
+
+// --- Grupos ---
+async function crearGrupo(nombre){
+  const row = { id:uid(), nombre };
+  await sb.from('grupos').insert(row);
+  grupos.push(row);
+  return row;
+}
+async function borrarGrupo(id){
+  await sb.from('grupos').delete().eq('id', id);
+  const diasDelGrupo = rutinaDias.filter(d=>d.grupoId===id).map(d=>d.id);
+  if(diasDelGrupo.length){
+    await sb.from('rutina_ejercicios').delete().in('rutina_dia_id', diasDelGrupo);
+    await sb.from('rutina_dias').delete().eq('grupo_id', id);
+  }
+  Object.values(perfiles).forEach(p=>{ if(p.grupoId===id) p.grupoId=null; });
+  await savePerfiles();
+  grupos = grupos.filter(g=>g.id!==id);
+  rutinaDias = rutinaDias.filter(d=>d.grupoId!==id);
+  rutinaEjercicios = rutinaEjercicios.filter(e=> !diasDelGrupo.includes(e.rutinaDiaId));
+}
+
+// --- Rutinas ---
+function rutinaDiasDe(dni){
+  const perfil = perfiles[dni];
+  const propios = rutinaDias.filter(d=>d.dni===dni);
+  const delGrupo = perfil && perfil.grupoId ? rutinaDias.filter(d=>d.grupoId===perfil.grupoId) : [];
+  return [...propios, ...delGrupo].sort((a,b)=> a.orden-b.orden);
+}
+function ejerciciosDe(rutinaDiaId){ return rutinaEjercicios.filter(e=>e.rutinaDiaId===rutinaDiaId).sort((a,b)=>a.orden-b.orden); }
+async function crearRutinaDia(target, nombreDia){
+  const row = { id:uid(), dni: target.dni||null, grupo_id: target.grupoId||null, nombre_dia:nombreDia, orden: Date.now() };
+  await sb.from('rutina_dias').insert(row);
+  rutinaDias.push({ id:row.id, dni:row.dni, grupoId:row.grupo_id, nombreDia, orden:row.orden });
+  return row;
+}
+async function borrarRutinaDia(id){
+  await sb.from('rutina_ejercicios').delete().eq('rutina_dia_id', id);
+  await sb.from('rutina_dias').delete().eq('id', id);
+  rutinaDias = rutinaDias.filter(d=>d.id!==id);
+  rutinaEjercicios = rutinaEjercicios.filter(e=>e.rutinaDiaId!==id);
+}
+async function agregarEjercicio(rutinaDiaId, nombre, series, repeticiones, peso){
+  const row = { id:uid(), rutina_dia_id:rutinaDiaId, nombre, series, repeticiones, peso, orden:Date.now() };
+  await sb.from('rutina_ejercicios').insert(row);
+  rutinaEjercicios.push({ id:row.id, rutinaDiaId, nombre, series, repeticiones, peso, orden:row.orden });
+}
+async function borrarEjercicio(id){
+  await sb.from('rutina_ejercicios').delete().eq('id', id);
+  rutinaEjercicios = rutinaEjercicios.filter(e=>e.id!==id);
+}
+async function pegarRutinaDiaEn(target){
+  const copia = state.rutinaCopiada;
+  if(!copia) return;
+  const row = await crearRutinaDia(target, copia.nombreDia+' (copia)');
+  for(const ej of copia.ejercicios){ await agregarEjercicio(row.id, ej.nombre, ej.series, ej.repeticiones, ej.peso); }
+}
+
+// --- Registros de entrenamiento (progreso) ---
+function registrosDe(dni){ return registros.filter(r=>r.dni===dni).sort((a,b)=> b.fecha.localeCompare(a.fecha) || b.ts-a.ts); }
+async function guardarRegistro(dni, fecha, ejercicio, series, repeticiones, peso, esExtra, rutinaEjercicioId){
+  const row = { id:uid(), dni, fecha, ejercicio, series, repeticiones, peso, es_extra:!!esExtra, rutina_ejercicio_id:rutinaEjercicioId||null, ts:Date.now() };
+  await sb.from('registros').insert(row);
+  registros.push({ id:row.id, dni, fecha, ejercicio, series, repeticiones, peso, esExtra:!!esExtra, rutinaEjercicioId:rutinaEjercicioId||null, ts:row.ts });
+}
+async function borrarRegistro(id){
+  await sb.from('registros').delete().eq('id', id);
+  registros = registros.filter(r=>r.id!==id);
+}
+
 function uid(){ return 'r_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
 
 /* ======================================================================
@@ -544,9 +696,12 @@ function render(){
   else if(v==='dia') html = renderDia();
   else if(v==='form') html = renderForm();
   else if(v==='confirmacion') html = renderConfirmacion();
+  else if(v==='testimonio') html = renderTestimonio();
   else if(v==='miSemana') html = renderMiSemana();
   else if(v==='adminPin') html = renderAdminPin();
   else if(v==='admin') html = renderAdmin();
+  else if(v==='adminAlumno') html = renderAdminAlumnoFicha();
+  else if(v==='adminGrupo') html = renderAdminGrupoFicha();
 
   app.innerHTML = `<div class="view active view-enter">${html}</div>`;
   bindEvents();
@@ -585,13 +740,14 @@ function renderHome(){
     <div class="home-section">
       <h2 class="home-section-title">Lo que dicen los alumnos</h2>
       <div class="testi-row">
-        ${CONFIG.testimonios.map(t=>`
+        ${testimonios.slice().sort((a,b)=>b.ts-a.ts).slice(0,10).map(t=>`
           <div class="testi-card">
             <div class="testi-stars">★★★★★</div>
             <p class="testi-text">"${escapeHtml(t.texto)}"</p>
-            <div class="testi-name">— ${escapeHtml(t.nombre)}</div>
+            <div class="testi-name">— ${escapeHtml(t.nombreMostrado)}</div>
           </div>`).join('')}
       </div>
+      <button class="admin-link" id="btnDejarTestimonio" style="margin-top:8px;">Dejar un comentario</button>
     </div>
     <div class="home-section">
       <h2 class="home-section-title">El espacio</h2>
@@ -608,17 +764,21 @@ function renderHome(){
 }
 
 function renderIdentificar(){
+  const pedirDatos = state.idNecesitaDatos;
   return `
     <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
     <div class="pad">
       <p class="section-eyebrow">Antes de reservar</p>
       <h2 class="section-title">¿Quién entrena?</h2>
-      <div class="form-note">Usamos tu DNI para reconocerte y mostrarte cuántas clases te quedan según tu plan.</div>
+      <div class="form-note">${pedirDatos ? 'No te encontramos registrado — completá estos datos una sola vez.' : 'Ingresá tu DNI. Si ya entrenás con nosotros, con eso alcanza.'}</div>
       <div class="form-alert" id="idAlert"></div>
-      <div class="field"><label for="inpIdDni">DNI</label><input id="inpIdDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.idDni)}"></div>
-      <div class="field"><label for="inpIdNombre">Nombre y apellido</label><input id="inpIdNombre" type="text" placeholder="Ej: Juana Pérez" value="${escapeHtml(state.idNombre)}"></div>
-      <div class="field"><label for="inpIdTel">WhatsApp</label><input id="inpIdTel" type="tel" placeholder="Ej: 341 555 1234" value="${escapeHtml(state.idTel)}"></div>
-      <button class="cta-primary" id="btnContinuarId">Continuar</button>
+      <div class="field"><label for="inpIdDni">DNI</label><input id="inpIdDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.idDni)}" ${pedirDatos?'readonly':''}></div>
+      ${pedirDatos ? `
+        <div class="field"><label for="inpIdNombre">Nombre y apellido</label><input id="inpIdNombre" type="text" placeholder="Ej: Juana Pérez" value="${escapeHtml(state.idNombre)}"></div>
+        <div class="field"><label for="inpIdTel">WhatsApp</label><input id="inpIdTel" type="tel" placeholder="Ej: 341 555 1234" value="${escapeHtml(state.idTel)}"></div>
+        <button class="cta-primary" id="btnContinuarId">Registrarme y continuar</button>
+        <button class="cta-secondary" id="btnVolverDni">Volver a poner mi DNI</button>
+      ` : `<button class="cta-primary" id="btnContinuarId">Continuar</button>`}
     </div>
   `;
 }
@@ -686,7 +846,7 @@ function renderDia(){
   return `
     <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
     <div class="pad">
-      <p class="section-eyebrow">${state.modoModificar ? 'Elegí el nuevo horario' : 'Paso 2 de 3'}</p>
+      <p class="section-eyebrow">${state.modoModificar ? 'Elegí el nuevo horario' : `Hola, ${nombreSaludo(state.identidad.nombre, state.identidad.dni)}`}</p>
       <h2 class="section-title">Elegí un día</h2>
       <div class="day-chips">${chips}</div>
       ${banner}
@@ -701,7 +861,7 @@ function cuposLibresCarritoItem(item){ const slot = getSlot(item.dia, item.horaI
 function renderForm(){
   const idBox = `
     <div class="form-identidad">
-      <span>Reservando para<b>${escapeHtml(state.identidad.nombre)}</b></span>
+      <span>Reservando para<b>${escapeHtml(nombreSaludo(state.identidad.nombre, state.identidad.dni))}</b></span>
       <span style="color:var(--muted); font-size:12px;">DNI ${state.identidad.dni}</span>
     </div>
   `;
@@ -780,6 +940,63 @@ function renderConfirmacion(){
   `;
 }
 
+function renderTestimonio(){
+  const perfil = state.testiPerfil;
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Inicio</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">Tu opinión nos importa</p>
+      <h2 class="section-title">Dejar un comentario</h2>
+      <div class="form-alert" id="testiAlert"></div>
+      <div class="field"><label for="inpTestiDni">Tu DNI</label><input id="inpTestiDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.testiDni)}" ${perfil?'readonly':''}></div>
+      ${perfil===undefined ? `<button class="cta-secondary" id="btnBuscarTesti" style="margin-top:0;">Continuar</button>` : ''}
+      ${perfil===null ? `<p class="empty-note">No encontramos ese DNI registrado. Hablá con tu profesor para que te registre y puedas dejar tu comentario.</p>` : ''}
+      ${perfil ? `
+        <div class="field" style="margin-top:16px;"><label for="inpTestiTexto">Tu comentario</label><textarea id="inpTestiTexto" rows="4" placeholder="Contanos tu experiencia..." style="width:100%; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:11px; padding:14px 15px; font-family:var(--font-body); font-size:15px; color:var(--text); resize:vertical;">${escapeHtml(state.testiTexto)}</textarea></div>
+        <button class="cta-primary" id="btnEnviarTesti">Publicar comentario</button>
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderProgresoLista(dni){
+  const mios = registrosDe(dni);
+  if(mios.length===0) return `<p class="empty-note">Todavía no hay entrenamientos registrados.</p>`;
+  const porFecha = {};
+  mios.forEach(r=>{ (porFecha[r.fecha] = porFecha[r.fecha]||[]).push(r); });
+  return Object.keys(porFecha).sort((a,b)=>b.localeCompare(a)).map(fecha=>`
+    <div class="progreso-day">
+      <p class="wi-date" style="margin:0 0 8px;">${formatFechaLarga(fecha)}</p>
+      ${porFecha[fecha].map(r=>{
+        let badge;
+        if(r.esExtra) badge = `<span class="cumplio-badge extra">Extra</span>`;
+        else{
+          const plan = rutinaEjercicios.find(e=>e.id===r.rutinaEjercicioId);
+          const cumplio = plan ? ((r.series||0)>=(plan.series||0) && (r.repeticiones||0)>=(plan.repeticiones||0)) : true;
+          badge = cumplio ? `<span class="cumplio-badge si">Cumplió</span>` : `<span class="cumplio-badge no">Parcial</span>`;
+        }
+        return `<div class="progreso-ex"><span>${escapeHtml(r.ejercicio)} — ${r.series||'-'}x${r.repeticiones||'-'}${r.peso?' · '+r.peso+'kg':''}</span>${badge}</div>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+function renderComprobantesLista(dni, contexto){
+  const propios = comprobantesDe(dni);
+  return `
+    <div class="field">
+      <label for="inpComprobante_${contexto}">Subir comprobante de pago</label>
+      <input type="file" id="inpComprobante_${contexto}" accept="image/*" class="inp-comprobante" data-dni="${dni}" data-contexto="${contexto}">
+    </div>
+    ${propios.length===0 ? `<p class="empty-note">Todavía no hay comprobantes cargados.</p>` : propios.map(c=>`
+      <div class="comprobante-row">
+        <a href="${c.url}" target="_blank" rel="noopener"><img src="${c.url}" class="comprobante-thumb"></a>
+        <span style="font-size:12.5px; color:var(--muted);">${new Date(c.ts).toLocaleDateString('es-AR')} · subido por ${c.subidoPor==='entrenador'?'el profesor':'el alumno'}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
 function renderMiSemana(){
   let contenido = '';
   if(state.buscarDni){
@@ -791,17 +1008,21 @@ function renderMiSemana(){
     const futuros = mias.filter(r=>r.fecha>=hoy);
 
     let plan = '';
+    let saludo = '';
+    let btnReservarOtra = '';
     if(perfil){
+      saludo = `<p class="section-eyebrow" style="margin-bottom:14px;">¡Hola, ${escapeHtml(nombreSaludo(perfil.nombre, perfil.dni))}!</p>`;
       const estado = mensajePlanEstado(perfil, hoyKey());
-      plan = `<div class="plan-banner"><p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p><p class="plan-banner-msg">${estado.texto}</p></div>`;
+      plan = `<div class="plan-banner ${estado.bloqueado?'blocked':''}"><p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p><p class="plan-banner-msg">${estado.texto}</p></div>`;
+      if(!estado.bloqueado) btnReservarOtra = `<button class="cta-primary" id="btnReservarOtraDesdeMiSemana" style="margin-top:14px;">+ Reservar otra clase</button>`;
     }
 
     if(mias.length===0){
-      contenido = plan + `<p class="empty-note">No encontramos reservas con ese DNI. Si es tu primera vez, ¡reservá tu primer entrenamiento!</p>`;
+      contenido = saludo + plan + btnReservarOtra + `<p class="empty-note" style="margin-top:16px;">No encontramos reservas con ese DNI. Si es tu primera vez, ¡reservá tu primer entrenamiento!</p>`;
     }else{
-      contenido = plan + `
+      contenido = saludo + plan + btnReservarOtra + `
         ${futuros.length>0 ? `
-          <div class="week-group">
+          <div class="week-group" style="margin-top:20px;">
             <h3 class="week-group-title">Próximos turnos</h3>
             ${futuros.map(r=>`
               <div class="week-item" data-id="${r.id}">
@@ -822,10 +1043,23 @@ function renderMiSemana(){
               <div class="week-item">
                 <div class="week-item-head">
                   <span><span class="wi-date">${formatFechaLarga(r.fecha)}</span><br><span class="wi-hora">${r.hora}</span></span>
-                  <span class="badge badge-ok">Hecho</span>
+                  <span class="badge ${r.asistio===true?'badge-ok':r.asistio===false?'badge-cancel':'badge-pend'}">${r.asistio===true?'Asistió':r.asistio===false?'No asistió':'Sin confirmar'}</span>
                 </div>
               </div>`).join('')}
           </div>` : ''}
+      `;
+    }
+
+    if(perfil){
+      contenido += `
+        <div class="week-group">
+          <h3 class="week-group-title">Comprobantes de pago</h3>
+          ${renderComprobantesLista(dni, 'alumno')}
+        </div>
+        <div class="week-group">
+          <h3 class="week-group-title">Mi progreso</h3>
+          ${renderProgresoLista(dni)}
+        </div>
       `;
     }
   }
@@ -857,13 +1091,14 @@ function renderAdminPin(){
 }
 
 function renderAdmin(){
-  const tabs = [['dashboard','Hoy'], ['agenda','Agenda'], ['horarios','Horarios'], ['alumnos','Alumnos']];
+  const tabs = [['dashboard','Hoy'], ['agenda','Agenda'], ['horarios','Horarios'], ['alumnos','Alumnos'], ['portada','Portada']];
   const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminTab===id?'active':''}" data-tab="${id}">${label}</button>`).join('')}</div>`;
   let body = '';
   if(state.adminTab==='dashboard') body = renderAdminDashboard();
   else if(state.adminTab==='agenda') body = renderAdminAgenda();
   else if(state.adminTab==='horarios') body = renderAdminHorarios();
-  else body = renderAdminAlumnos();
+  else if(state.adminTab==='alumnos') body = renderAdminAlumnos();
+  else body = renderAdminPortada();
 
   return `
     <div class="topbar"><button class="back-btn" id="btnBack" data-to="home">${icon('back')} Salir</button></div>
@@ -942,13 +1177,24 @@ function renderAdminAgenda(){
               <div class="admin-alumnos">
                 ${alumnos.length===0 ? `<p class="admin-alumno-libre">Sin reservas para este horario</p>` : alumnos.map(a=>{
                   const apodo = a.dni && perfiles[a.dni] ? perfiles[a.dni].apodo : '';
+                  const asistCtrl = a.asistio===true
+                    ? `<button class="mini-btn ok btn-asistencia" data-id="${a.id}" data-valor="null">✓ Asistió</button>`
+                    : a.asistio===false
+                      ? `<button class="mini-btn warn btn-asistencia" data-id="${a.id}" data-valor="null">✗ Ausente</button>`
+                      : `<span style="display:flex; gap:4px;">
+                          <button class="mini-btn ok btn-asistencia" data-id="${a.id}" data-valor="true">Asistió</button>
+                          <button class="mini-btn warn btn-asistencia" data-id="${a.id}" data-valor="false">Ausente</button>
+                        </span>`;
                   return `
-                  <div class="admin-alumno" data-reserva="${a.id}">
-                    <span><span class="admin-alumno-name">${escapeHtml(a.nombre)}${apodo?' ('+escapeHtml(apodo)+')':''}</span><br><span class="admin-alumno-tel">${escapeHtml(a.telefono)}</span></span>
-                    <span style="display:flex; gap:2px;">
-                      <a class="icon-btn" href="${waLink(a.telefono, `Hola ${nombreSaludo(a.nombre,a.dni)}! Te escribimos de ${CONFIG.nombreEspacio}.`)}" target="_blank" rel="noopener" title="Escribir por WhatsApp">${icon('wa')}</a>
-                      <button class="icon-btn btn-cancel-reserva" data-id="${a.id}" data-fecha="${f.key}" data-hora="${s.hora}" data-nombre="${escapeHtml(a.nombre)}" data-tel="${escapeHtml(a.telefono)}" data-dni="${a.dni||''}" title="Cancelar reserva">${icon('trash')}</button>
-                    </span>
+                  <div class="admin-alumno" data-reserva="${a.id}" style="flex-direction:column; align-items:stretch; gap:6px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                      <span><span class="admin-alumno-name">${escapeHtml(a.nombre)}${apodo?' ('+escapeHtml(apodo)+')':''}</span><br><span class="admin-alumno-tel">${escapeHtml(a.telefono)}</span></span>
+                      <span style="display:flex; gap:2px;">
+                        <a class="icon-btn" href="${waLink(a.telefono, `Hola ${nombreSaludo(a.nombre,a.dni)}! Te escribimos de ${CONFIG.nombreEspacio}.`)}" target="_blank" rel="noopener" title="Escribir por WhatsApp">${icon('wa')}</a>
+                        <button class="icon-btn btn-cancel-reserva" data-id="${a.id}" data-fecha="${f.key}" data-hora="${s.hora}" data-nombre="${escapeHtml(a.nombre)}" data-tel="${escapeHtml(a.telefono)}" data-dni="${a.dni||''}" title="Cancelar reserva">${icon('trash')}</button>
+                      </span>
+                    </div>
+                    <div>${asistCtrl}</div>
                   </div>`;
                 }).join('')}
               </div>
@@ -1052,11 +1298,37 @@ function renderAdminAlumnos(){
   ` : `<button class="add-slot-btn" id="btnMostrarNuevoAlumno" style="margin-bottom:14px;">+ Registrar alumno nuevo</button>`;
 
   if(Object.values(perfiles).length===0) return `${searchBox}${bloqueNuevo}<div class="empty-state">Todavía no hay alumnos registrados. Registralos manualmente o se crean solos cuando reservan.</div>`;
-  if(lista.length===0) return `${searchBox}${bloqueNuevo}<div class="empty-state">No encontramos alumnos con ese criterio.</div>`;
+
+  const bloqueGrupoNuevo = state.mostrarNuevoGrupo ? `
+    <div class="admin-slot">
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="ngNombre" value="${escapeHtml(state.ngNombre)}" placeholder="Nombre del grupo (ej: Grupo mañana)" style="flex:1; background:var(--bg-elev-2); border:1px solid var(--border-strong); border-radius:8px; padding:9px 11px; font-size:13px; font-family:var(--font-body); color:var(--text);">
+        <button class="tiny-btn accent" id="btnGuardarGrupo">Crear</button>
+        <button class="tiny-btn" id="btnCancelarGrupo">Cancelar</button>
+      </div>
+    </div>
+  ` : '';
+
+  const bloqueGrupos = `
+    <div class="admin-day-group">
+      <div class="admin-day-title-row">
+        <h3 class="admin-day-title">Grupos de entrenamiento</h3>
+        ${!state.mostrarNuevoGrupo ? `<button class="tiny-btn accent" id="btnMostrarNuevoGrupo">+ Crear grupo</button>` : ''}
+      </div>
+      ${bloqueGrupoNuevo}
+      ${grupos.length===0 ? `<p class="admin-alumno-libre">Todavía no hay grupos creados.</p>` : grupos.map(g=>{
+        const miembros = Object.values(perfiles).filter(p=>p.grupoId===g.id).length;
+        return `<div class="grupo-row"><span>${escapeHtml(g.nombre)} <span style="color:var(--muted); font-size:12px;">· ${miembros} alumno${miembros===1?'':'s'}</span></span><button class="tiny-btn btn-ver-grupo" data-id="${g.id}">Ver / editar</button></div>`;
+      }).join('')}
+    </div>
+  `;
+
+  if(lista.length===0) return `${searchBox}${bloqueNuevo}${bloqueGrupos}<div class="empty-state">No encontramos alumnos con ese criterio.</div>`;
 
   return `
     ${searchBox}
     ${bloqueNuevo}
+    ${bloqueGrupos}
     <div class="admin-slot" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
       <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="chkTodos"> Seleccionar todos</label>
       <button class="add-slot-btn" id="btnRecordarTodos" style="flex:0 0 auto;">Enviar recordatorio</button>
@@ -1075,6 +1347,7 @@ function renderAdminAlumnos(){
             </span>
             <span style="display:flex; align-items:center; gap:6px;">
               ${badge}
+              <button class="tiny-btn btn-ver-ficha" data-dni="${a.dni}">Ver ficha</button>
               <a class="icon-btn" href="${waLink(a.telefono, mensajeRecordatorio(a.nombre, a.dni))}" target="_blank" rel="noopener" title="Enviar recordatorio">${icon('wa')}</a>
             </span>
           </div>
@@ -1093,6 +1366,198 @@ function renderAdminAlumnos(){
   `;
 }
 
+function renderRutinaEditor(target){
+  const dias = target.dni ? rutinaDias.filter(d=>d.dni===target.dni) : rutinaDias.filter(d=>d.grupoId===target.grupoId);
+  const copia = state.rutinaCopiada;
+  return `
+    ${copia ? `
+      <div class="copy-bar">
+        <span>📋 Copiaste "${escapeHtml(copia.nombreDia)}" (${copia.ejercicios.length} ejercicios)</span>
+        <div class="copy-bar-actions">
+          <button class="tiny-btn accent btn-pegar-rutina-dia">Pegar acá</button>
+          <button class="tiny-btn" id="btnDescartarCopiaRutina">Descartar</button>
+        </div>
+      </div>` : ''}
+    ${dias.length===0 ? `<p class="empty-note">Todavía no hay rutina cargada.</p>` : dias.sort((a,b)=>a.orden-b.orden).map(d=>{
+      const ejercicios = ejerciciosDe(d.id);
+      return `
+        <div class="rutina-dia">
+          <div class="rutina-dia-head">
+            <span class="admin-slot-hora" style="font-size:16px;">${escapeHtml(d.nombreDia)}</span>
+            <span style="display:flex; gap:4px;">
+              <button class="tiny-btn btn-copiar-rutina-dia" data-id="${d.id}" data-nombre="${escapeHtml(d.nombreDia)}">Copiar</button>
+              <button class="icon-btn btn-borrar-rutina-dia" data-id="${d.id}" title="Eliminar día">${icon('trash')}</button>
+            </span>
+          </div>
+          ${ejercicios.map(e=>`
+            <div class="ejercicio-row" data-id="${e.id}">
+              <span style="flex:2; min-width:100px; font-size:12.5px;">${escapeHtml(e.nombre)}</span>
+              <span style="font-size:12px; color:var(--muted);">${e.series||'-'}x${e.repeticiones||'-'}${e.peso?' · '+e.peso+'kg':''}</span>
+              <button class="icon-btn btn-borrar-ejercicio" data-id="${e.id}" title="Eliminar">${icon('trash')}</button>
+            </div>
+          `).join('')}
+          <div class="ejercicio-row">
+            <input type="text" class="ej-nombre" placeholder="Ejercicio" id="ejNombre_${d.id}">
+            <input type="number" min="0" class="ej-num" placeholder="Series" id="ejSeries_${d.id}">
+            <input type="number" min="0" class="ej-num" placeholder="Reps" id="ejReps_${d.id}">
+            <input type="number" min="0" step="0.5" class="ej-num" placeholder="Kg" id="ejPeso_${d.id}">
+            <button class="tiny-btn btn-agregar-ejercicio" data-id="${d.id}">+ Agregar</button>
+          </div>
+        </div>
+      `;
+    }).join('')}
+    <div style="display:flex; gap:8px; margin-top:6px;">
+      <input type="text" id="nuevoDiaNombre" placeholder="Nombre del día (ej: Día 1 - Pecho)" style="flex:1; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:10px; padding:11px 12px; font-family:var(--font-body); font-size:13.5px; color:var(--text);">
+      <button class="add-slot-btn btn-agregar-dia" style="flex:0 0 auto;">+ Agregar día</button>
+    </div>
+  `;
+}
+
+function renderRegistroYProgreso(dni){
+  const diasDisp = rutinaDiasDe(dni);
+  const fecha = state.registroFecha || hoyKey();
+  const diaSel = diasDisp.find(d=>d.id===state.registroDiaId);
+  const ejerciciosPlan = diaSel ? ejerciciosDe(diaSel.id) : [];
+
+  return `
+    <div class="rutina-dia">
+      <p class="admin-slot-hora" style="font-size:16px; margin-bottom:10px;">Registrar entrenamiento</p>
+      <div class="alumno-edit-row" style="margin-top:0;">
+        <div class="alumno-edit-col"><span class="alumno-edit-label">Fecha</span><input type="date" id="inpRegistroFecha" value="${fecha}"></div>
+        <div class="alumno-edit-col"><span class="alumno-edit-label">Día de la rutina</span>
+          <select id="selRegistroDia">
+            <option value="">— Elegir —</option>
+            ${diasDisp.map(d=>`<option value="${d.id}" ${state.registroDiaId===d.id?'selected':''}>${escapeHtml(d.nombreDia)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${diaSel ? `
+        ${ejerciciosPlan.map(e=>`
+          <div class="ejercicio-row" data-plan-id="${e.id}">
+            <span style="flex:2; min-width:90px; font-size:12.5px;">${escapeHtml(e.nombre)} <span style="color:var(--muted-2);">(plan: ${e.series||'-'}x${e.repeticiones||'-'})</span></span>
+            <input type="number" min="0" class="ej-num reg-series" placeholder="Series">
+            <input type="number" min="0" class="ej-num reg-reps" placeholder="Reps">
+            <input type="number" min="0" step="0.5" class="ej-num reg-peso" placeholder="Kg">
+          </div>
+        `).join('')}
+        <p class="alumno-edit-label" style="margin-top:10px;">Ejercicios extra (no estaban en el plan)</p>
+        ${state.registroExtra.map((ex,i)=>`
+          <div class="ejercicio-row" data-extra-idx="${i}">
+            <input type="text" class="ej-nombre reg-extra-nombre" placeholder="Ejercicio" value="${escapeHtml(ex.nombre)}" data-idx="${i}">
+            <input type="number" min="0" class="ej-num reg-extra-series" placeholder="Series" value="${ex.series||''}" data-idx="${i}">
+            <input type="number" min="0" class="ej-num reg-extra-reps" placeholder="Reps" value="${ex.repeticiones||''}" data-idx="${i}">
+            <input type="number" min="0" step="0.5" class="ej-num reg-extra-peso" placeholder="Kg" value="${ex.peso||''}" data-idx="${i}">
+            <button class="icon-btn btn-quitar-extra" data-idx="${i}" title="Quitar">${icon('trash')}</button>
+          </div>
+        `).join('')}
+        <button class="tiny-btn" id="btnAgregarExtra" style="margin-top:4px;">+ Agregar ejercicio extra</button>
+        <button class="cta-primary" id="btnGuardarRegistro" style="margin-top:14px;">Guardar entrenamiento del día</button>
+      ` : `<p class="empty-note">Elegí un día de la rutina para registrar lo que hizo (o cargá primero la rutina en la pestaña "Rutina").</p>`}
+    </div>
+    <div class="week-group">
+      <h3 class="week-group-title">Historial</h3>
+      ${renderProgresoLista(dni)}
+    </div>
+  `;
+}
+
+function renderAdminAlumnoFicha(){
+  const dni = state.adminAlumnoDni;
+  const a = perfiles[dni];
+  if(!a) return `<div class="empty-state">Alumno no encontrado.</div>`;
+  const tabs = [['pagos','Pagos'],['rutina','Rutina'],['progreso','Progreso']];
+  const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminAlumnoTab===id?'active':''}" data-atab="${id}">${label}</button>`).join('')}</div>`;
+  let body='';
+  if(state.adminAlumnoTab==='pagos') body = renderComprobantesLista(dni,'entrenador');
+  else if(state.adminAlumnoTab==='rutina') body = renderRutinaEditor({dni});
+  else body = renderRegistroYProgreso(dni);
+
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="admin">${icon('back')} Alumnos</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">Ficha del alumno</p>
+      <h2 class="section-title">${escapeHtml(a.nombre)}${a.apodo?' <span style="color:var(--accent-2);">('+escapeHtml(a.apodo)+')</span>':''}</h2>
+      ${tabsHtml}
+      ${body}
+    </div>
+  `;
+}
+
+function renderAdminGrupoFicha(){
+  const g = grupos.find(x=>x.id===state.adminGrupoId);
+  if(!g) return `<div class="empty-state">Grupo no encontrado.</div>`;
+  const filtro = state.filtroAlumno.trim().toLowerCase();
+  let miembrosPosibles = Object.values(perfiles);
+  if(filtro) miembrosPosibles = miembrosPosibles.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro));
+
+  return `
+    <div class="topbar"><button class="back-btn" id="btnBack" data-to="admin">${icon('back')} Alumnos</button></div>
+    <div class="pad">
+      <p class="section-eyebrow">Grupo de entrenamiento</p>
+      <h2 class="section-title">${escapeHtml(g.nombre)}</h2>
+      <div class="dash-block">
+        <h3 class="dash-block-title">Rutina del grupo</h3>
+        ${renderRutinaEditor({grupoId:g.id})}
+      </div>
+      <div class="dash-block">
+        <h3 class="dash-block-title">Miembros</h3>
+        <div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar alumno" value="${escapeHtml(state.filtroAlumno)}"></div>
+        ${miembrosPosibles.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>`
+          <div class="admin-alumno" style="padding:8px 0; border-bottom:1px solid var(--border);">
+            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+              <input type="checkbox" class="chk-miembro-grupo" data-dni="${a.dni}" ${a.grupoId===g.id?'checked':''}>
+              <span>${escapeHtml(a.nombre)}${a.apodo?' ('+escapeHtml(a.apodo)+')':''}</span>
+            </label>
+          </div>
+        `).join('')}
+      </div>
+      <button class="cta-secondary" id="btnBorrarGrupo" style="border-color:var(--warn); color:var(--warn);">Eliminar este grupo</button>
+    </div>
+  `;
+}
+
+function renderAdminPortada(){
+  const fotos = CONFIG.fotos.map((f,i)=>`
+    <div class="foto-item" style="width:100px; height:100px; position:relative;">
+      <img src="${f}">
+      <button class="icon-btn btn-quitar-foto" data-idx="${i}" style="position:absolute; top:2px; right:2px; background:rgba(255,255,255,0.85); border-radius:50%;">${icon('trash')}</button>
+    </div>
+  `).join('');
+  const opcionesPlan = Object.entries(CONFIG.planes);
+
+  return `
+    <div class="dash-block">
+      <h3 class="dash-block-title">Datos generales</h3>
+      <div class="field"><label>Nombre del espacio</label><input type="text" class="portada-field" data-campo="nombreEspacio" value="${escapeHtml(CONFIG.nombreEspacio)}"></div>
+      <div class="field"><label>Nombre del profesor</label><input type="text" class="portada-field" data-campo="nombreProfesor" value="${escapeHtml(CONFIG.nombreProfesor)}"></div>
+      <div class="field"><label>Frase</label><input type="text" class="portada-field" data-campo="frase" value="${escapeHtml(CONFIG.frase)}"></div>
+      <div class="field"><label>Descripción</label><input type="text" class="portada-field" data-campo="descripcion" value="${escapeHtml(CONFIG.descripcion)}"></div>
+      <div class="field"><label>Instagram</label><input type="text" class="portada-field" data-campo="instagram" value="${escapeHtml(CONFIG.instagram)}"></div>
+      <div class="field"><label>WhatsApp (sin + ni espacios)</label><input type="text" class="portada-field" data-campo="whatsapp" value="${escapeHtml(CONFIG.whatsapp)}"></div>
+      <div class="field"><label>Dirección</label><input type="text" class="portada-field" data-campo="direccion" value="${escapeHtml(CONFIG.direccion)}"></div>
+      <div class="field"><label>Política de cancelación</label><input type="text" class="portada-field" data-campo="politicaCancelacion" value="${escapeHtml(CONFIG.politicaCancelacion)}"></div>
+    </div>
+    <div class="dash-block">
+      <h3 class="dash-block-title">Fotos del espacio</h3>
+      <div class="foto-row" style="flex-wrap:wrap;">${fotos}</div>
+      <div class="field" style="margin-top:10px;"><label>Agregar foto</label><input type="file" id="inpNuevaFoto" accept="image/*"></div>
+    </div>
+    <div class="dash-block">
+      <h3 class="dash-block-title">Planes</h3>
+      ${opcionesPlan.map(([id,p])=>`
+        <div class="admin-slot">
+          <div class="alumno-edit-row" style="margin-top:0;">
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Nombre</span><input type="text" class="plan-field" data-plan="${id}" data-campo="nombre" value="${escapeHtml(p.nombre)}"></div>
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Clases/semana</span><input type="number" min="0" class="plan-field" data-plan="${id}" data-campo="clasesPorSemana" value="${p.clasesPorSemana==null?'':p.clasesPorSemana}" placeholder="${id==='perso'?'lo define el profe':''}"></div>
+          </div>
+          <div class="field" style="margin-top:8px; margin-bottom:0;"><input type="text" class="plan-field" data-plan="${id}" data-campo="desc" value="${escapeHtml(p.desc)}"></div>
+        </div>
+      `).join('')}
+    </div>
+    <p class="empty-note">Todos los cambios se guardan solos al salir de cada campo.</p>
+  `;
+}
+
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str==null?'':str; return d.innerHTML; }
 
 /* ======================================================================
@@ -1105,38 +1570,49 @@ function bindEvents(){
   const back = $('#btnBack');
   if(back) back.onclick = ()=>{
     if(state.modoModificar){ state.modoModificar=null; state.view='miSemana'; render(); return; }
+    if(state.view==='adminAlumno' || state.view==='adminGrupo'){ state.view='admin'; state.adminTab='alumnos'; render(); return; }
     state.view = back.dataset.to; render();
   };
 
   if(state.view==='home'){
     $('#btnReservar').onclick = ()=>{
-      state.identidad=null; state.idDni=''; state.idNombre=''; state.idTel='';
+      state.identidad=null; state.idDni=''; state.idNombre=''; state.idTel=''; state.idNecesitaDatos=false;
       state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.modoModificar=null;
       state.carrito=[]; state.amigos=[]; state.limiteMsg='';
       state.view='identificar'; render();
     };
     $('#btnMiSemana').onclick = ()=>{ state.view='miSemana'; render(); };
     $('#btnAdmin').onclick = ()=>{ state.view='adminPin'; render(); };
+    $('#btnDejarTestimonio').onclick = ()=>{ state.testiDni=''; state.testiTexto=''; state.testiPerfil=undefined; state.view='testimonio'; render(); };
   }
 
   if(state.view==='identificar'){
     $('#inpIdDni').oninput = e=>{ state.idDni = e.target.value; };
-    $('#inpIdNombre').oninput = e=>{ state.idNombre = e.target.value; };
-    $('#inpIdTel').oninput = e=>{ state.idTel = e.target.value; };
-    $('#inpIdDni').onblur = async ()=>{
+    const nombreEl = $('#inpIdNombre'); if(nombreEl) nombreEl.oninput = e=>{ state.idNombre = e.target.value; };
+    const telEl = $('#inpIdTel'); if(telEl) telEl.oninput = e=>{ state.idTel = e.target.value; };
+    const btnVolver = $('#btnVolverDni');
+    if(btnVolver) btnVolver.onclick = ()=>{ state.idNecesitaDatos=false; state.idDni=''; state.idNombre=''; state.idTel=''; render(); };
+
+    $('#btnContinuarId').onclick = async ()=>{
+      const alertBox = $('#idAlert');
       const dni = normalizarDni(state.idDni);
-      if(dni.length>=6){
+      if(dni.length<6){ alertBox.textContent='Ingresá un DNI válido (mínimo 6 dígitos).'; alertBox.style.display='block'; return; }
+
+      if(!state.idNecesitaDatos){
         await loadData();
         const p = perfiles[dni];
-        if(p){ state.idNombre = p.nombre; state.idTel = p.telefono; render(); }
+        if(p){
+          state.identidad = { dni: p.dni, nombre: p.nombre, telefono: p.telefono };
+          state.view='dia'; render();
+        }else{
+          state.idNecesitaDatos = true; render();
+        }
+        return;
       }
-    };
-    $('#btnContinuarId').onclick = async ()=>{
-      const dni = normalizarDni(state.idDni);
+
       const nombre = state.idNombre.trim();
       const tel = state.idTel.trim();
-      const alertBox = $('#idAlert');
-      if(dni.length<6 || !nombre || !tel){ alertBox.textContent='Completá tu DNI (mínimo 6 dígitos), nombre y WhatsApp.'; alertBox.style.display='block'; return; }
+      if(!nombre || !tel){ alertBox.textContent='Completá tu nombre y WhatsApp.'; alertBox.style.display='block'; return; }
       await loadData();
       const perfil = await upsertPerfil(nombre, tel, dni);
       state.identidad = { dni: perfil.dni, nombre: perfil.nombre, telefono: perfil.telefono };
@@ -1280,6 +1756,29 @@ function bindEvents(){
     $('#btnVolverInicio').onclick = ()=>{ state.view='home'; state.identidad=null; state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.carrito=[]; state.amigos=[]; render(); };
   }
 
+  if(state.view==='testimonio'){
+    const dniEl = $('#inpTestiDni'); if(dniEl) dniEl.oninput = e=>{ state.testiDni = e.target.value; };
+    const btnBuscar = $('#btnBuscarTesti');
+    if(btnBuscar) btnBuscar.onclick = async ()=>{
+      const dni = normalizarDni(state.testiDni);
+      const alertBox = $('#testiAlert');
+      if(dni.length<6){ alertBox.textContent='Ingresá un DNI válido.'; alertBox.style.display='block'; return; }
+      await loadData();
+      state.testiPerfil = perfiles[dni] || null;
+      render();
+    };
+    const textoEl = $('#inpTestiTexto'); if(textoEl) textoEl.oninput = e=>{ state.testiTexto = e.target.value; };
+    const btnEnviar = $('#btnEnviarTesti');
+    if(btnEnviar) btnEnviar.onclick = async ()=>{
+      const texto = (textoEl.value||'').trim();
+      const alertBox = $('#testiAlert');
+      if(!texto){ alertBox.textContent='Escribí tu comentario antes de publicarlo.'; alertBox.style.display='block'; return; }
+      const p = state.testiPerfil;
+      await agregarTestimonio(p.dni, nombreSaludo(p.nombre, p.dni), texto);
+      state.view='home'; render();
+    };
+  }
+
   if(state.view==='miSemana'){
     $('#inpBuscarDni').oninput = e=>{ state.buscarDni = e.target.value; };
     $('#btnBuscarMiSemana').onclick = async ()=>{
@@ -1309,6 +1808,24 @@ function bindEvents(){
         state.view='dia'; render();
       };
     });
+    const btnReservarOtra = $('#btnReservarOtraDesdeMiSemana');
+    if(btnReservarOtra) btnReservarOtra.onclick = ()=>{
+      const dni = normalizarDni(state.buscarDni);
+      const perfil = perfiles[dni];
+      if(!perfil) return;
+      state.identidad = { dni: perfil.dni, nombre: perfil.nombre, telefono: perfil.telefono };
+      state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.modoModificar=null;
+      state.carrito=[]; state.amigos=[]; state.limiteMsg='';
+      state.view='dia'; render();
+    };
+    $$('.inp-comprobante').forEach(inp=>{
+      inp.onchange = async ()=>{
+        const file = inp.files[0];
+        if(!file) return;
+        await subirComprobante(file, inp.dataset.dni, 'alumno');
+        render();
+      };
+    });
   }
 
   if(state.view==='adminPin'){
@@ -1325,6 +1842,17 @@ function bindEvents(){
     $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; await loadData(); render(); });
 
     if(state.adminTab==='agenda'){
+      $$('.btn-asistencia').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const r = reservas.find(x=>x.id===btn.dataset.id);
+          if(!r) return;
+          const valor = btn.dataset.valor;
+          r.asistio = valor==='null' ? null : (valor==='true');
+          r.asistioTs = Date.now();
+          await saveReservas();
+          render();
+        };
+      });
       $$('.btn-cancel-reserva').forEach(btn=>{
         btn.onclick = async ()=>{
           if(btn.dataset.armed==='1'){
@@ -1479,8 +2007,164 @@ function bindEvents(){
           }
         };
       });
+      $$('.btn-ver-ficha').forEach(btn=>{
+        btn.onclick = ()=>{ state.adminAlumnoDni = btn.dataset.dni; state.adminAlumnoTab='pagos'; state.registroDiaId=''; state.registroExtra=[]; state.view='adminAlumno'; render(); };
+      });
+      const btnMostrarNuevoGrupo = $('#btnMostrarNuevoGrupo');
+      if(btnMostrarNuevoGrupo) btnMostrarNuevoGrupo.onclick = ()=>{ state.mostrarNuevoGrupo=true; state.ngNombre=''; render(); };
+      const btnCancelarGrupo = $('#btnCancelarGrupo');
+      if(btnCancelarGrupo) btnCancelarGrupo.onclick = ()=>{ state.mostrarNuevoGrupo=false; render(); };
+      const ngNombreEl = $('#ngNombre'); if(ngNombreEl) ngNombreEl.oninput = e=>{ state.ngNombre = e.target.value; };
+      const btnGuardarGrupo = $('#btnGuardarGrupo');
+      if(btnGuardarGrupo) btnGuardarGrupo.onclick = async ()=>{
+        const nombre = state.ngNombre.trim();
+        if(!nombre) return;
+        await crearGrupo(nombre);
+        state.mostrarNuevoGrupo=false;
+        render();
+      };
+      $$('.btn-ver-grupo').forEach(btn=>{
+        btn.onclick = ()=>{ state.adminGrupoId = btn.dataset.id; state.filtroAlumno=''; state.view='adminGrupo'; render(); };
+      });
+    }
+
+    if(state.adminTab==='portada'){
+      $$('.portada-field').forEach(inp=>{
+        inp.onchange = async ()=>{ CONFIG[inp.dataset.campo] = inp.value; await saveConfig(); render(); };
+      });
+      $$('.plan-field').forEach(inp=>{
+        inp.onchange = async ()=>{
+          const plan = CONFIG.planes[inp.dataset.plan];
+          if(!plan) return;
+          if(inp.dataset.campo==='clasesPorSemana'){ plan.clasesPorSemana = inp.value===''? null : parseInt(inp.value)||0; }
+          else{ plan[inp.dataset.campo] = inp.value; }
+          await saveConfig();
+          render();
+        };
+      });
+      const inpNuevaFoto = $('#inpNuevaFoto');
+      if(inpNuevaFoto) inpNuevaFoto.onchange = async ()=>{
+        const file = inpNuevaFoto.files[0];
+        if(!file) return;
+        await subirFotoPortada(file);
+        render();
+      };
+      $$('.btn-quitar-foto').forEach(btn=>{
+        btn.onclick = async ()=>{ CONFIG.fotos.splice(+btn.dataset.idx,1); await saveConfig(); render(); };
+      });
     }
   }
+
+  if(state.view==='adminAlumno'){
+    $$('.admin-tab').forEach(t=> t.onclick = ()=>{ state.adminAlumnoTab = t.dataset.atab; render(); });
+    if(state.adminAlumnoTab==='pagos') bindComprobanteEvents($$);
+    if(state.adminAlumnoTab==='rutina') bindRutinaEditorEvents($, $$, { dni: state.adminAlumnoDni });
+    if(state.adminAlumnoTab==='progreso'){
+      const selDia = $('#selRegistroDia');
+      if(selDia) selDia.onchange = e=>{ state.registroDiaId = e.target.value; state.registroExtra=[]; render(); };
+      const fechaEl = $('#inpRegistroFecha');
+      if(fechaEl) fechaEl.onchange = e=>{ state.registroFecha = e.target.value; };
+      const btnAgregarExtra = $('#btnAgregarExtra');
+      if(btnAgregarExtra) btnAgregarExtra.onclick = ()=>{ state.registroExtra.push({nombre:'',series:null,repeticiones:null,peso:null}); render(); };
+      $$('.reg-extra-nombre').forEach(inp=> inp.oninput = e=>{ state.registroExtra[+e.target.dataset.idx].nombre = e.target.value; });
+      $$('.reg-extra-series').forEach(inp=> inp.oninput = e=>{ state.registroExtra[+e.target.dataset.idx].series = parseInt(e.target.value)||null; });
+      $$('.reg-extra-reps').forEach(inp=> inp.oninput = e=>{ state.registroExtra[+e.target.dataset.idx].repeticiones = parseInt(e.target.value)||null; });
+      $$('.reg-extra-peso').forEach(inp=> inp.oninput = e=>{ state.registroExtra[+e.target.dataset.idx].peso = e.target.value===''?null:parseFloat(e.target.value); });
+      $$('.btn-quitar-extra').forEach(btn=> btn.onclick = ()=>{ state.registroExtra.splice(+btn.dataset.idx,1); render(); });
+      const btnGuardarRegistro = $('#btnGuardarRegistro');
+      if(btnGuardarRegistro) btnGuardarRegistro.onclick = async ()=>{
+        const dni = state.adminAlumnoDni;
+        const fecha = ($('#inpRegistroFecha').value) || hoyKey();
+        const filas = $$('.ejercicio-row[data-plan-id]');
+        for(const fila of filas){
+          const planId = fila.dataset.planId;
+          const plan = rutinaEjercicios.find(e=>e.id===planId);
+          const series = parseInt(fila.querySelector('.reg-series').value)||null;
+          const reps = parseInt(fila.querySelector('.reg-reps').value)||null;
+          const pesoVal = fila.querySelector('.reg-peso').value;
+          const peso = pesoVal===''?null:parseFloat(pesoVal);
+          if(series==null && reps==null && peso==null) continue;
+          await guardarRegistro(dni, fecha, plan.nombre, series, reps, peso, false, planId);
+        }
+        for(const ex of state.registroExtra){
+          if(!ex.nombre || !ex.nombre.trim()) continue;
+          await guardarRegistro(dni, fecha, ex.nombre.trim(), ex.series, ex.repeticiones, ex.peso, true, null);
+        }
+        state.registroExtra=[];
+        render();
+      };
+    }
+  }
+
+  if(state.view==='adminGrupo'){
+    bindRutinaEditorEvents($, $$, { grupoId: state.adminGrupoId });
+    const buscar = $('#inpBuscarAlumno');
+    if(buscar) buscar.oninput = e=>{ state.filtroAlumno = e.target.value; render(); };
+    $$('.chk-miembro-grupo').forEach(chk=>{
+      chk.onchange = async ()=>{
+        const p = perfiles[chk.dataset.dni];
+        if(!p) return;
+        p.grupoId = chk.checked ? state.adminGrupoId : null;
+        await savePerfiles();
+        render();
+      };
+    });
+    const btnBorrarGrupo = $('#btnBorrarGrupo');
+    if(btnBorrarGrupo) btnBorrarGrupo.onclick = async ()=>{
+      if(btnBorrarGrupo.dataset.armed==='1'){
+        await borrarGrupo(state.adminGrupoId);
+        state.view='admin'; state.adminTab='alumnos'; render();
+      }else{
+        btnBorrarGrupo.dataset.armed='1'; btnBorrarGrupo.textContent='¿Seguro? Tocá de nuevo';
+      }
+    };
+  }
+}
+
+function bindRutinaEditorEvents($, $$, target){
+  const btnAgregarDiaEl = $('.btn-agregar-dia');
+  if(btnAgregarDiaEl) btnAgregarDiaEl.onclick = async ()=>{
+    const nombreDia = ($('#nuevoDiaNombre').value||'').trim();
+    if(!nombreDia) return;
+    await crearRutinaDia(target, nombreDia);
+    render();
+  };
+  $$('.btn-agregar-ejercicio').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = btn.dataset.id;
+      const nombre = ($(`#ejNombre_${id}`).value||'').trim();
+      if(!nombre) return;
+      const series = parseInt($(`#ejSeries_${id}`).value)||null;
+      const reps = parseInt($(`#ejReps_${id}`).value)||null;
+      const pesoVal = $(`#ejPeso_${id}`).value;
+      const peso = pesoVal==='' ? null : parseFloat(pesoVal);
+      await agregarEjercicio(id, nombre, series, reps, peso);
+      render();
+    };
+  });
+  $$('.btn-borrar-ejercicio').forEach(btn=>{ btn.onclick = async ()=>{ await borrarEjercicio(btn.dataset.id); render(); }; });
+  $$('.btn-borrar-rutina-dia').forEach(btn=>{ btn.onclick = async ()=>{ await borrarRutinaDia(btn.dataset.id); render(); }; });
+  $$('.btn-copiar-rutina-dia').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.rutinaCopiada = { nombreDia: btn.dataset.nombre, ejercicios: ejerciciosDe(btn.dataset.id).map(e=>({nombre:e.nombre, series:e.series, repeticiones:e.repeticiones, peso:e.peso})) };
+      render();
+    };
+  });
+  const btnPegar = $('.btn-pegar-rutina-dia');
+  if(btnPegar) btnPegar.onclick = async ()=>{ await pegarRutinaDiaEn(target); render(); };
+  const btnDescartarCopiaRutina = $('#btnDescartarCopiaRutina');
+  if(btnDescartarCopiaRutina) btnDescartarCopiaRutina.onclick = ()=>{ state.rutinaCopiada=null; render(); };
+}
+
+function bindComprobanteEvents($$){
+  $$('.inp-comprobante').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const file = inp.files[0];
+      if(!file) return;
+      await subirComprobante(file, inp.dataset.dni, inp.dataset.contexto==='entrenador'?'entrenador':'alumno');
+      render();
+    };
+  });
 }
 
 async function pegarHorariosEn(diaDestino){
@@ -1506,3 +2190,4 @@ async function pegarHorariosEn(diaDestino){
 </script>
 </body>
 </html>
+
