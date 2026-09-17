@@ -262,6 +262,7 @@
   .cumplio-badge.si{background:var(--ok-soft); color:var(--ok);}
   .cumplio-badge.no{background:var(--warn-soft); color:var(--warn);}
   .cumplio-badge.extra{background:var(--accent-soft); color:var(--accent);}
+  .cumplio-badge.neutro{background:var(--bg-elev-2); color:var(--muted);}
   .rutina-dia{ background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
   .rutina-dia-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .ejercicio-row{ display:flex; gap:6px; margin-bottom:6px; align-items:center; flex-wrap:wrap; }
@@ -432,26 +433,50 @@ async function loadData(){
   registros = (rg.data||[]).map(x=>({ id:x.id, dni:x.dni, fecha:x.fecha, ejercicio:x.ejercicio, series:x.series, repeticiones:x.repeticiones, peso:x.peso, esExtra:x.es_extra, rutinaEjercicioId:x.rutina_ejercicio_id, ts:x.ts }));
 }
 
-async function saveSchedule(){
+async function saveSchedule(idsABorrar){
   const rows = [];
   DIAS.forEach(dia => (schedule[dia]||[]).forEach(s => rows.push({ id:s.id, dia, hora:s.hora, cupo_max:s.cupoMax })));
-  await sb.from('horarios').delete().neq('id','__none__');
-  if(rows.length) await sb.from('horarios').insert(rows);
+  if(idsABorrar && idsABorrar.length){
+    const del = await sb.from('horarios').delete().in('id', idsABorrar);
+    if(del.error){ console.error('Error actualizando horarios:', del.error); alert('No se pudo guardar el horario: '+del.error.message); return false; }
+  }
+  if(rows.length){
+    const ins = await sb.from('horarios').upsert(rows, { onConflict:'id' });
+    if(ins.error){ console.error('Error guardando horarios:', ins.error); alert('No se pudo guardar el horario: '+ins.error.message); return false; }
+  }
+  return true;
 }
 async function saveReservas(){
   const rows = reservas.map(r=>({ id:r.id, fecha:r.fecha, dia:r.dia, hora_id:r.horaId, hora:r.hora, nombre:r.nombre, telefono:r.telefono, dni:r.dni, estado:r.estado, ts:r.ts, grupo_id:r.grupoId||null, cancelada_ts:r.canceladaTs||null, asistio: r.asistio===undefined?null:r.asistio, asistio_ts:r.asistioTs||null }));
-  if(rows.length) await sb.from('reservas').upsert(rows, { onConflict:'id' });
+  if(!rows.length) return true;
+  const { error } = await sb.from('reservas').upsert(rows, { onConflict:'id' });
+  if(error){ console.error('Error guardando reservas:', error); alert('No se pudo guardar la reserva: '+error.message); return false; }
+  return true;
 }
-async function saveWaitlist(){
+async function saveWaitlist(idsABorrar){
   const rows = waitlist.map(w=>({ id:w.id, fecha:w.fecha, dia:w.dia, hora_id:w.horaId, hora:w.hora, nombre:w.nombre, telefono:w.telefono, dni:w.dni, ts:w.ts, estado:w.estado }));
-  await sb.from('waitlist').delete().neq('id','__none__');
-  if(rows.length) await sb.from('waitlist').insert(rows);
+  if(idsABorrar && idsABorrar.length){
+    const del = await sb.from('waitlist').delete().in('id', idsABorrar);
+    if(del.error){ console.error('Error actualizando lista de espera:', del.error); alert('No se pudo actualizar la lista de espera: '+del.error.message); return false; }
+  }
+  if(rows.length){
+    const ins = await sb.from('waitlist').upsert(rows, { onConflict:'id' });
+    if(ins.error){ console.error('Error guardando lista de espera:', ins.error); alert('No se pudo guardar la lista de espera: '+ins.error.message); return false; }
+  }
+  return true;
 }
 async function savePerfiles(){
   const rows = Object.values(perfiles).map(p=>({ dni:p.dni, nombre:p.nombre, telefono:p.telefono, apodo:p.apodo||'', fecha_nac:p.fechaNac||null, plan:p.plan||null, clases_perso_por_semana: p.clasesPersoPorSemana??null, grupo_id:p.grupoId||null, creado: p.creado!==false, actualizado:p.actualizado||Date.now() }));
-  if(rows.length) await sb.from('perfiles').upsert(rows, { onConflict:'dni' });
+  if(!rows.length) return true;
+  const { error } = await sb.from('perfiles').upsert(rows, { onConflict:'dni' });
+  if(error){ console.error('Error guardando perfiles:', error); alert('No se pudo guardar el alumno: '+error.message); return false; }
+  return true;
 }
-async function saveConfig(){ await sb.from('config_sitio').upsert({ id:1, data: CONFIG }); }
+async function saveConfig(){
+  const { error } = await sb.from('config_sitio').upsert({ id:1, data: CONFIG });
+  if(error){ console.error('Error guardando configuración:', error); alert('No se pudo guardar el cambio: '+error.message); return false; }
+  return true;
+}
 
 // --- Comprobantes de pago ---
 async function subirComprobante(file, dni, subidoPor){
@@ -686,14 +711,19 @@ function huecosLibres(n=8){
   });
   return out.slice(0,n);
 }
+function proximaFechaCumple(mes, dia, anio){
+  const fecha = new Date(anio, mes-1, dia);
+  if(fecha.getMonth()!==mes-1) return new Date(anio, mes-1, 28); // 29/2 en año no bisiesto -> 28/2
+  return fecha;
+}
 function cumpleaniosProximos(){
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const out = [];
   Object.values(perfiles).forEach(p=>{
     if(!p.fechaNac) return;
     const [, m, d] = p.fechaNac.split('-').map(Number);
-    let prox = new Date(hoy.getFullYear(), m-1, d);
-    if(prox < hoy) prox = new Date(hoy.getFullYear()+1, m-1, d);
+    let prox = proximaFechaCumple(m, d, hoy.getFullYear());
+    if(prox < hoy) prox = proximaFechaCumple(m, d, hoy.getFullYear()+1);
     const dias = Math.round((prox-hoy)/86400000);
     if(dias<=7) out.push({ nombre:p.nombre, telefono:p.telefono, dni:p.dni, apodo:p.apodo, dias, fecha:prox });
   });
@@ -1017,8 +1047,11 @@ function renderProgresoLista(dni){
         if(r.esExtra) badge = `<span class="cumplio-badge extra">Extra</span>`;
         else{
           const plan = rutinaEjercicios.find(e=>e.id===r.rutinaEjercicioId);
-          const cumplio = plan ? ((r.series||0)>=(plan.series||0) && (r.repeticiones||0)>=(plan.repeticiones||0)) : true;
-          badge = cumplio ? `<span class="cumplio-badge si">Cumplió</span>` : `<span class="cumplio-badge no">Parcial</span>`;
+          if(!plan) badge = `<span class="cumplio-badge neutro">Sin referencia</span>`;
+          else{
+            const cumplio = (r.series||0)>=(plan.series||0) && (r.repeticiones||0)>=(plan.repeticiones||0);
+            badge = cumplio ? `<span class="cumplio-badge si">Cumplió</span>` : `<span class="cumplio-badge no">Parcial</span>`;
+          }
         }
         return `<div class="progreso-ex"><span>${escapeHtml(r.ejercicio)} — ${r.series||'-'}x${r.repeticiones||'-'}${r.peso?' · '+r.peso+'kg':''}</span>${badge}</div>`;
       }).join('')}
@@ -1642,7 +1675,10 @@ function renderAdminPortada(){
   `;
 }
 
-function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str==null?'':str; return d.innerHTML; }
+function escapeHtml(str){
+  const d = document.createElement('div'); d.textContent = str==null?'':str;
+  return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 /* ======================================================================
    EVENTOS
@@ -1970,12 +2006,17 @@ function bindEvents(){
           if(!slot || cuposLibres(w.fecha, slot) <= 0){ alert('Ya no hay cupo disponible para asignarle.'); return; }
           reservas.push({ id:uid(), fecha:w.fecha, dia, horaId:w.horaId, hora:w.hora, nombre:w.nombre, telefono:w.telefono, dni:w.dni||null, estado:'confirmada', ts:Date.now(), grupoId:null });
           waitlist = waitlist.filter(x=>x.id!==w.id);
-          await saveReservas(); await saveWaitlist();
+          await saveReservas(); await saveWaitlist([w.id]);
           render();
         };
       });
       $$('.btn-descartar-espera').forEach(btn=>{
-        btn.onclick = async ()=>{ waitlist = waitlist.filter(x=>x.id!==btn.dataset.id); await saveWaitlist(); render(); };
+        btn.onclick = async ()=>{
+          const idBorrado = btn.dataset.id;
+          waitlist = waitlist.filter(x=>x.id!==idBorrado);
+          await saveWaitlist([idBorrado]);
+          render();
+        };
       });
     }
 
@@ -1991,9 +2032,10 @@ function bindEvents(){
           if(btn.dataset.armed==='1'){
             const dia = btn.dataset.dia, id = btn.dataset.id;
             reservas.forEach(r=>{ if(r.dia===dia && r.horaId===id && r.estado!=='cancelada'){ r.estado='cancelada'; r.canceladaTs=Date.now(); } });
+            const idsEsperaBorrados = waitlist.filter(w=> w.dia===dia && w.horaId===id).map(w=>w.id);
             waitlist = waitlist.filter(w=> !(w.dia===dia && w.horaId===id));
             schedule[dia] = schedule[dia].filter(s=>s.id!==id);
-            await saveSchedule(); await saveReservas(); await saveWaitlist();
+            await saveSchedule([id]); await saveReservas(); await saveWaitlist(idsEsperaBorrados);
             render();
           }else{
             $$('.btn-del-slot').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm');});
@@ -2290,9 +2332,10 @@ async function pegarHorariosEn(diaDestino){
   const nuevosIds = new Set(nuevosSlots.map(s=>s.id));
   const idsViejos = (schedule[diaDestino]||[]).map(s=>s.id).filter(id=>!nuevosIds.has(id));
   reservas.forEach(r=>{ if(r.dia===diaDestino && idsViejos.includes(r.horaId) && r.estado!=='cancelada'){ r.estado='cancelada'; r.canceladaTs=Date.now(); } });
+  const idsEsperaBorrados = waitlist.filter(w=> w.dia===diaDestino && idsViejos.includes(w.horaId)).map(w=>w.id);
   waitlist = waitlist.filter(w=> !(w.dia===diaDestino && idsViejos.includes(w.horaId)));
   schedule[diaDestino] = nuevosSlots;
-  await saveSchedule(); await saveReservas(); await saveWaitlist();
+  await saveSchedule(idsViejos); await saveReservas(); await saveWaitlist(idsEsperaBorrados);
 }
 
 /* ======================================================================
