@@ -503,9 +503,12 @@ function rutinaDiasDe(dni){
 }
 function ejerciciosDe(rutinaDiaId){ return rutinaEjercicios.filter(e=>e.rutinaDiaId===rutinaDiaId).sort((a,b)=>a.orden-b.orden); }
 async function crearRutinaDia(target, nombreDia){
-  const row = { id:uid(), dni: target.dni||null, grupo_id: target.grupoId||null, nombre_dia:nombreDia, orden: Date.now() };
-  await sb.from('rutina_dias').insert(row);
-  rutinaDias.push({ id:row.id, dni:row.dni, grupoId:row.grupo_id, nombreDia, orden:row.orden });
+  const existentes = target.dni ? rutinaDias.filter(d=>d.dni===target.dni) : rutinaDias.filter(d=>d.grupoId===target.grupoId);
+  const orden = existentes.length;
+  const row = { id:uid(), dni: target.dni||null, grupo_id: target.grupoId||null, nombre_dia:nombreDia, orden };
+  const { error } = await sb.from('rutina_dias').insert(row);
+  if(error){ console.error('Error creando día de rutina:', error); alert('No se pudo guardar el día: '+error.message); return row; }
+  rutinaDias.push({ id:row.id, dni:row.dni, grupoId:row.grupo_id, nombreDia, orden });
   return row;
 }
 async function borrarRutinaDia(id){
@@ -515,9 +518,11 @@ async function borrarRutinaDia(id){
   rutinaEjercicios = rutinaEjercicios.filter(e=>e.rutinaDiaId!==id);
 }
 async function agregarEjercicio(rutinaDiaId, nombre, series, repeticiones, peso){
-  const row = { id:uid(), rutina_dia_id:rutinaDiaId, nombre, series, repeticiones, peso, orden:Date.now() };
-  await sb.from('rutina_ejercicios').insert(row);
-  rutinaEjercicios.push({ id:row.id, rutinaDiaId, nombre, series, repeticiones, peso, orden:row.orden });
+  const orden = rutinaEjercicios.filter(e=>e.rutinaDiaId===rutinaDiaId).length;
+  const row = { id:uid(), rutina_dia_id:rutinaDiaId, nombre, series, repeticiones, peso, orden };
+  const { error } = await sb.from('rutina_ejercicios').insert(row);
+  if(error){ console.error('Error agregando ejercicio:', error); alert('No se pudo guardar el ejercicio: '+error.message); return; }
+  rutinaEjercicios.push({ id:row.id, rutinaDiaId, nombre, series, repeticiones, peso, orden });
 }
 async function borrarEjercicio(id){
   await sb.from('rutina_ejercicios').delete().eq('id', id);
@@ -1369,7 +1374,29 @@ function renderAdminAlumnos(){
 function renderRutinaEditor(target){
   const dias = target.dni ? rutinaDias.filter(d=>d.dni===target.dni) : rutinaDias.filter(d=>d.grupoId===target.grupoId);
   const copia = state.rutinaCopiada;
-  return `
+
+  let grupoReadOnlyHtml = '';
+  if(target.dni){
+    const perfilAlumno = perfiles[target.dni];
+    if(perfilAlumno && perfilAlumno.grupoId){
+      const grupo = grupos.find(g=>g.id===perfilAlumno.grupoId);
+      const diasGrupo = rutinaDias.filter(d=>d.grupoId===perfilAlumno.grupoId).sort((a,b)=>a.orden-b.orden);
+      if(diasGrupo.length>0){
+        grupoReadOnlyHtml = `
+          <p class="waitlist-title" style="margin-bottom:8px;">Rutina compartida del grupo "${escapeHtml(grupo?grupo.nombre:'')}" — se edita desde Grupos</p>
+          ${diasGrupo.map(d=>`
+            <div class="rutina-dia" style="opacity:0.85;">
+              <div class="rutina-dia-head"><span class="admin-slot-hora" style="font-size:15px;">${escapeHtml(d.nombreDia)}</span></div>
+              ${ejerciciosDe(d.id).map(e=>`<div class="ejercicio-row"><span style="flex:1; font-size:12.5px;">${escapeHtml(e.nombre)} — ${e.series||'-'}x${e.repeticiones||'-'}${e.peso?' · '+e.peso+'kg':''}</span></div>`).join('')}
+            </div>
+          `).join('')}
+          <p class="waitlist-title" style="margin:14px 0 8px;">Rutina individual (editable acá)</p>
+        `;
+      }
+    }
+  }
+
+  return grupoReadOnlyHtml + `
     ${copia ? `
       <div class="copy-bar">
         <span>📋 Copiaste "${escapeHtml(copia.nombreDia)}" (${copia.ejercicios.length} ejercicios)</span>
@@ -2190,4 +2217,3 @@ async function pegarHorariosEn(diaDestino){
 </script>
 </body>
 </html>
-
