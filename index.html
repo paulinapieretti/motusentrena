@@ -23,10 +23,27 @@
   @media(min-width:640px){
     #app{ min-height:auto; margin:32px 0; border-radius:20px; border:1px solid var(--border); box-shadow:0 40px 80px -20px rgba(18,24,31,0.28); overflow:hidden; }
   }
+  /* Escritorio: cada tipo de pantalla usa el ancho disponible de forma distinta en vez de flotar una tarjeta angosta. */
+  @media(min-width:900px){
+    #app{ max-width:620px; }
+    #app[data-view="home"]{ max-width:1120px; }
+    #app[data-view="admin"], #app[data-view="adminAlumno"], #app[data-view="adminGrupo"]{ max-width:920px; }
+  }
   .view{display:none;}
   .view.active{display:flex; flex-direction:column; flex:1;}
   .view-enter{animation:viewIn .38s cubic-bezier(.2,.7,.3,1) both;}
   @keyframes viewIn{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes sectionIn{ from{opacity:0; transform:translateY(18px);} to{opacity:1; transform:translateY(0);} }
+  #app[data-view="home"] .home-top{ animation:sectionIn .6s cubic-bezier(.2,.7,.3,1) both .06s; }
+  #app[data-view="home"] .home-section:nth-of-type(2){ animation:sectionIn .6s cubic-bezier(.2,.7,.3,1) both .16s; }
+  #app[data-view="home"] .home-section:nth-of-type(3){ animation:sectionIn .6s cubic-bezier(.2,.7,.3,1) both .26s; }
+  #app[data-view="home"] .home-section:nth-of-type(4){ animation:sectionIn .6s cubic-bezier(.2,.7,.3,1) both .36s; }
+  #app[data-view="home"] .home-section:nth-of-type(5){ animation:sectionIn .6s cubic-bezier(.2,.7,.3,1) both .46s; }
+  #app[data-view="home"] .info-block{ animation:sectionIn .6s cubic-bezier(.2,.7,.3,1) both .56s; }
+  @media(prefers-reduced-motion:reduce){
+    .view-enter, #app[data-view="home"] .home-top, #app[data-view="home"] .home-section, #app[data-view="home"] .info-block{ animation:none; }
+    .foto-item, .foto-item img, .plan-card, .testi-card, .profesor-row{ transition:none; }
+  }
   .pad{padding:28px 24px 40px;}
   .topbar{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:18px 20px 4px; }
   .back-btn{ background:none; border:none; color:var(--muted); font-family:var(--font-body); font-size:15px; font-weight:500; cursor:pointer; display:flex; align-items:center; gap:6px; padding:6px 4px; margin-left:-4px; }
@@ -56,22 +73,32 @@
   .quick-link:hover{border-color:var(--accent);}
 
   .home-section{ padding:34px 28px 0; }
-  .home-section-title{ font-family:var(--font-display); font-size:23px; font-weight:800; margin:0 0 14px; letter-spacing:-0.3px; }
-  .testi-row{ display:flex; gap:12px; overflow-x:auto; margin:0 -28px; padding:2px 28px 8px; }
+  .home-section-title{ position:relative; font-family:var(--font-display); font-size:23px; font-weight:800; margin:0 0 20px; letter-spacing:-0.3px; padding-bottom:11px; }
+  .home-section-title::after{ content:''; position:absolute; left:0; bottom:0; width:36px; height:3px; border-radius:2px; background:var(--accent-2); }
+  .testi-row{ display:flex; gap:12px; overflow-x:auto; margin:0 -28px; padding:6px 28px 14px; }
   .testi-row::-webkit-scrollbar{display:none;}
-  .testi-card{ flex:0 0 auto; width:240px; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:18px 18px 16px; }
+  .testi-card{ flex:0 0 auto; width:240px; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:18px 18px 16px; box-shadow:0 6px 18px -14px rgba(18,24,31,0.3); transition:transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s ease; }
+  .testi-card:hover{ box-shadow:0 16px 30px -14px rgba(18,24,31,0.32); }
   .testi-quote{ font-family:var(--font-display); font-size:42px; font-weight:800; color:var(--accent-2); line-height:0.5; margin:0 0 10px; }
   .testi-text{ font-size:13.5px; color:var(--text); line-height:1.55; margin:0 0 12px; min-height:52px; }
   .testi-name{ font-size:12px; color:var(--muted); font-weight:600; padding-top:10px; border-top:1px solid var(--border); }
-  .foto-row{ display:flex; gap:10px; overflow-x:auto; margin:0 -28px; padding:2px 28px 8px; }
+  .foto-row{ display:flex; gap:12px; overflow-x:auto; margin:0 -28px; padding:6px 28px 14px; }
   .foto-row::-webkit-scrollbar{display:none;}
-  .foto-item{ flex:0 0 auto; width:140px; height:140px; border-radius:10px; overflow:hidden; background:var(--bg-elev-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--muted-2); }
-  .foto-item img{width:100%; height:100%; object-fit:cover;}
+  .foto-item{ flex:0 0 auto; width:190px; height:190px; border-radius:14px; overflow:hidden; background:var(--bg-elev-2); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; color:var(--muted-2); box-shadow:0 12px 26px -14px rgba(18,24,31,0.32); transition:transform .3s cubic-bezier(.2,.7,.3,1), box-shadow .3s ease; }
+  .foto-item:active{transform:scale(0.97);}
+  .foto-item img{width:100%; height:100%; object-fit:cover; transition:transform .6s cubic-bezier(.2,.7,.3,1);}
   .foto-item svg{width:28px; height:28px;}
+  @media(hover:hover){
+    .foto-item:hover{ transform:translateY(-5px); box-shadow:0 20px 36px -14px rgba(18,24,31,0.4); }
+    .foto-item:hover img{ transform:scale(1.08); }
+    .plan-card:hover, .testi-card:hover{ transform:translateY(-4px); }
+    #app[data-view="home"] .profesor-row:hover{ transform:translateY(-3px); box-shadow:0 14px 26px -14px rgba(18,24,31,0.28); }
+  }
 
   .plans-row{ display:flex; gap:10px; overflow-x:auto; margin:0 -28px; padding:2px 28px 8px; }
   .plans-row::-webkit-scrollbar{display:none;}
-  .plan-card{ flex:0 0 auto; width:180px; background:var(--bg-elev); border:1px solid var(--border); border-top:3px solid var(--accent-2); border-radius:8px; padding:18px 16px 16px; }
+  .plan-card{ flex:0 0 auto; width:180px; background:var(--bg-elev); border:1px solid var(--border); border-top:3px solid var(--accent-2); border-radius:8px; padding:18px 16px 16px; box-shadow:0 6px 18px -14px rgba(18,24,31,0.3); transition:transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s ease; }
+  .plan-card:hover{ box-shadow:0 16px 30px -14px rgba(18,24,31,0.32); }
   .plan-card-count{ font-family:var(--font-display); font-size:32px; font-weight:800; line-height:1; margin:0; font-variant-numeric:tabular-nums; }
   .plan-card-count small{ display:block; font-family:var(--font-body); font-size:11px; font-weight:600; color:var(--muted); margin-top:3px; }
   .plan-card-name{ font-family:var(--font-display); font-size:18px; font-weight:700; margin:12px 0 6px; }
@@ -272,6 +299,39 @@
   .grupo-row{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:12px 15px; margin-bottom:8px; }
   .alumno-nombre-link{ background:none; border:none; padding:0; cursor:pointer; text-align:left; font-family:var(--font-body); }
   .alumno-nombre-link:hover .admin-alumno-name{color:var(--accent);}
+
+  /* ===== Escritorio (≥900px): cada vista usa el ancho disponible en vez de flotar una tarjeta angosta ===== */
+  @media(min-width:900px){
+    #app[data-view="home"] .home-top{ padding:64px 64px 0; }
+    #app[data-view="home"] .brand{ font-size:clamp(56px, 6vw, 88px); }
+    #app[data-view="home"] .lede{ max-width:56ch; }
+    #app[data-view="home"] .cta-primary{ display:inline-block; width:auto; min-width:280px; }
+    #app[data-view="home"] .cta-secondary{ width:auto; min-width:280px; }
+    #app[data-view="home"] .quick-links{ max-width:340px; }
+    #app[data-view="home"] .home-section{ padding:40px 64px 0; }
+    #app[data-view="home"] .info-block{ padding:28px 64px 32px; }
+
+    #app[data-view="home"] .plans-row,
+    #app[data-view="home"] .testi-row,
+    #app[data-view="home"] .foto-row{
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:16px;
+      overflow-x:visible; margin:0; padding:0;
+    }
+    #app[data-view="home"] .plan-card,
+    #app[data-view="home"] .testi-card{ width:auto; }
+    #app[data-view="home"] .foto-item{ width:auto; height:260px; }
+    #app[data-view="home"] .profesores-list{
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:10px 20px;
+    }
+    #app[data-view="home"] .profesor-row{
+      border-bottom:none; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+      transition:transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s ease;
+    }
+
+    #app[data-view="admin"] .stat-grid{ grid-template-columns:repeat(4,1fr); }
+    #app[data-view="admin"] .stat-card.wide{ grid-column:1/-1; }
+    #app[data-view="admin"] .pad, #app[data-view="adminAlumno"] .pad, #app[data-view="adminGrupo"] .pad{ padding:32px 40px 48px; }
+  }
   ::selection{background:var(--accent); color:#FFFFFF;}
 </style>
 </head>
@@ -764,6 +824,7 @@ function render(){
   else if(v==='adminAlumno') html = renderAdminAlumnoFicha();
   else if(v==='adminGrupo') html = renderAdminGrupoFicha();
 
+  app.dataset.view = v;
   app.innerHTML = `<div class="view active view-enter">${html}</div>`;
   bindEvents();
 }
