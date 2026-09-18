@@ -506,8 +506,9 @@ async function saveSchedule(idsABorrar){
   }
   return true;
 }
-async function saveReservas(){
-  const rows = reservas.map(r=>({ id:r.id, fecha:r.fecha, dia:r.dia, hora_id:r.horaId, hora:r.hora, nombre:r.nombre, telefono:r.telefono, dni:r.dni, estado:r.estado, ts:r.ts, grupo_id:r.grupoId||null, cancelada_ts:r.canceladaTs||null, asistio: r.asistio===undefined?null:r.asistio, asistio_ts:r.asistioTs||null }));
+async function saveReservas(itemsAGuardar){
+  const items = itemsAGuardar || reservas;
+  const rows = items.map(r=>({ id:r.id, fecha:r.fecha, dia:r.dia, hora_id:r.horaId, hora:r.hora, nombre:r.nombre, telefono:r.telefono, dni:r.dni, estado:r.estado, ts:r.ts, grupo_id:r.grupoId||null, cancelada_ts:r.canceladaTs||null, asistio: r.asistio===undefined?null:r.asistio, asistio_ts:r.asistioTs||null }));
   if(!rows.length) return true;
   const { error } = await sb.from('reservas').upsert(rows, { onConflict:'id' });
   if(error){ console.error('Error guardando reservas:', error); alert('No se pudo guardar la reserva: '+error.message); return false; }
@@ -1383,6 +1384,7 @@ function renderAdminHorarios(){
           <div class="day-copy-row">
             ${slots.length>0 ? `<button class="tiny-btn btn-copiar-horario" data-dia="${dia}">Copiar</button>` : ''}
             ${copia && copia.origen!==dia ? `<button class="tiny-btn accent btn-pegar-horario" data-dia="${dia}">Pegar acá</button>` : ''}
+            ${slots.length>0 ? `<button class="tiny-btn btn-vaciar-dia" data-dia="${dia}">Sin clases este día</button>` : ''}
           </div>
         </div>
         ${slots.length===0 ? `<p class="admin-alumno-libre">Sin horarios cargados</p>` : slots.map(s=>`
@@ -1825,7 +1827,7 @@ function bindEvents(){
           if(cuposLibres(state.fechaSel, slotFresco) <= 0){ alert('Ese horario se completó. Elegí otro.'); render(); return; }
           const r2 = reservas.find(x=>x.id===state.modoModificar);
           r2.fecha = state.fechaSel; r2.dia = dia; r2.horaId = slot.id; r2.hora = slot.hora;
-          await saveReservas();
+          await saveReservas([r2]);
           state.modoModificar = null; state.view='miSemana'; render();
           return;
         }
@@ -1922,13 +1924,16 @@ function bindEvents(){
       }
 
       const grupoId = amigosValidos.length>0 ? uid() : null;
+      const nuevasReservas = [];
       state.carrito.forEach(item=>{
-        reservas.push({ id:uid(), fecha:item.fecha, dia:item.dia, horaId:item.horaId, hora:item.hora, nombre, telefono, dni, estado:'confirmada', ts:Date.now(), grupoId });
+        const propia = { id:uid(), fecha:item.fecha, dia:item.dia, horaId:item.horaId, hora:item.hora, nombre, telefono, dni, estado:'confirmada', ts:Date.now(), grupoId };
+        reservas.push(propia); nuevasReservas.push(propia);
         amigosValidos.forEach(a=>{
-          reservas.push({ id:uid(), fecha:item.fecha, dia:item.dia, horaId:item.horaId, hora:item.hora, nombre:a.nombre.trim(), telefono:a.telefono.trim(), dni:null, estado:'confirmada', ts:Date.now(), grupoId });
+          const deAmigo = { id:uid(), fecha:item.fecha, dia:item.dia, horaId:item.horaId, hora:item.hora, nombre:a.nombre.trim(), telefono:a.telefono.trim(), dni:null, estado:'confirmada', ts:Date.now(), grupoId };
+          reservas.push(deAmigo); nuevasReservas.push(deAmigo);
         });
       });
-      await saveReservas();
+      await saveReservas(nuevasReservas);
       state.view='confirmacion'; render();
     };
   }
@@ -1970,8 +1975,7 @@ function bindEvents(){
       btn.onclick = async ()=>{
         if(btn.dataset.armed==='1'){
           const r = reservas.find(x=>x.id===btn.dataset.id);
-          if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); }
-          await saveReservas();
+          if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); await saveReservas([r]); }
           render();
         }else{
           $$('.btn-cancelar-propia').forEach(b=>{b.dataset.armed='0'; b.textContent='Cancelar';});
@@ -2030,7 +2034,7 @@ function bindEvents(){
           const valor = btn.dataset.valor;
           r.asistio = valor==='null' ? null : (valor==='true');
           r.asistioTs = Date.now();
-          await saveReservas();
+          await saveReservas([r]);
           render();
         };
       });
@@ -2040,8 +2044,7 @@ function bindEvents(){
             const { id, fecha, hora, nombre, tel, dni } = btn.dataset;
             window.open(waLink(tel, mensajeCancelacion(nombre, dni||null, fecha, hora)), '_blank');
             const r = reservas.find(x=>x.id===id);
-            if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); }
-            await saveReservas();
+            if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); await saveReservas([r]); }
             render();
           }else{
             $$('.btn-cancel-reserva').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm');});
@@ -2065,9 +2068,10 @@ function bindEvents(){
           const dia = nombreDiaSemana(parseFechaKey(w.fecha));
           const slot = getSlot(dia, w.horaId);
           if(!slot || cuposLibres(w.fecha, slot) <= 0){ alert('Ya no hay cupo disponible para asignarle.'); return; }
-          reservas.push({ id:uid(), fecha:w.fecha, dia, horaId:w.horaId, hora:w.hora, nombre:w.nombre, telefono:w.telefono, dni:w.dni||null, estado:'confirmada', ts:Date.now(), grupoId:null });
+          const nuevaReserva = { id:uid(), fecha:w.fecha, dia, horaId:w.horaId, hora:w.hora, nombre:w.nombre, telefono:w.telefono, dni:w.dni||null, estado:'confirmada', ts:Date.now(), grupoId:null };
+          reservas.push(nuevaReserva);
           waitlist = waitlist.filter(x=>x.id!==w.id);
-          await saveReservas(); await saveWaitlist([w.id]);
+          await Promise.all([saveReservas([nuevaReserva]), saveWaitlist([w.id])]);
           render();
         };
       });
@@ -2092,15 +2096,34 @@ function bindEvents(){
         btn.onclick = async ()=>{
           if(btn.dataset.armed==='1'){
             const dia = btn.dataset.dia, id = btn.dataset.id;
-            reservas.forEach(r=>{ if(r.dia===dia && r.horaId===id && r.estado!=='cancelada'){ r.estado='cancelada'; r.canceladaTs=Date.now(); } });
+            const reservasCanceladas = reservas.filter(r=> r.dia===dia && r.horaId===id && r.estado!=='cancelada');
+            reservasCanceladas.forEach(r=>{ r.estado='cancelada'; r.canceladaTs=Date.now(); });
             const idsEsperaBorrados = waitlist.filter(w=> w.dia===dia && w.horaId===id).map(w=>w.id);
             waitlist = waitlist.filter(w=> !(w.dia===dia && w.horaId===id));
             schedule[dia] = schedule[dia].filter(s=>s.id!==id);
-            await saveSchedule([id]); await saveReservas(); await saveWaitlist(idsEsperaBorrados);
+            await Promise.all([saveSchedule([id]), saveReservas(reservasCanceladas), saveWaitlist(idsEsperaBorrados)]);
             render();
           }else{
             $$('.btn-del-slot').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm');});
             btn.dataset.armed='1'; btn.classList.add('danger-confirm'); btn.title='Tocá de nuevo para confirmar';
+          }
+        };
+      });
+      $$('.btn-vaciar-dia').forEach(btn=>{
+        btn.onclick = async ()=>{
+          if(btn.dataset.armed==='1'){
+            const dia = btn.dataset.dia;
+            const idsBorrados = (schedule[dia]||[]).map(s=>s.id);
+            const reservasCanceladas = reservas.filter(r=> r.dia===dia && idsBorrados.includes(r.horaId) && r.estado!=='cancelada');
+            reservasCanceladas.forEach(r=>{ r.estado='cancelada'; r.canceladaTs=Date.now(); });
+            const idsEsperaBorrados = waitlist.filter(w=> w.dia===dia && idsBorrados.includes(w.horaId)).map(w=>w.id);
+            waitlist = waitlist.filter(w=> !(w.dia===dia && idsBorrados.includes(w.horaId)));
+            schedule[dia] = [];
+            await Promise.all([saveSchedule(idsBorrados), saveReservas(reservasCanceladas), saveWaitlist(idsEsperaBorrados)]);
+            render();
+          }else{
+            $$('.btn-vaciar-dia').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm'); b.textContent='Sin clases este día';});
+            btn.dataset.armed='1'; btn.classList.add('danger-confirm'); btn.textContent='¿Seguro? Tocá de nuevo';
           }
         };
       });
@@ -2392,11 +2415,12 @@ async function pegarHorariosEn(diaDestino){
   const nuevosSlots = copia.slots.map(s=>({ id: diaDestino+"__"+s.hora, hora:s.hora, cupoMax:s.cupoMax }));
   const nuevosIds = new Set(nuevosSlots.map(s=>s.id));
   const idsViejos = (schedule[diaDestino]||[]).map(s=>s.id).filter(id=>!nuevosIds.has(id));
-  reservas.forEach(r=>{ if(r.dia===diaDestino && idsViejos.includes(r.horaId) && r.estado!=='cancelada'){ r.estado='cancelada'; r.canceladaTs=Date.now(); } });
+  const reservasCanceladas = reservas.filter(r=> r.dia===diaDestino && idsViejos.includes(r.horaId) && r.estado!=='cancelada');
+  reservasCanceladas.forEach(r=>{ r.estado='cancelada'; r.canceladaTs=Date.now(); });
   const idsEsperaBorrados = waitlist.filter(w=> w.dia===diaDestino && idsViejos.includes(w.horaId)).map(w=>w.id);
   waitlist = waitlist.filter(w=> !(w.dia===diaDestino && idsViejos.includes(w.horaId)));
   schedule[diaDestino] = nuevosSlots;
-  await saveSchedule(idsViejos); await saveReservas(); await saveWaitlist(idsEsperaBorrados);
+  await Promise.all([saveSchedule(idsViejos), saveReservas(reservasCanceladas), saveWaitlist(idsEsperaBorrados)]);
 }
 
 /* ======================================================================
