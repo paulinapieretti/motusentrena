@@ -303,6 +303,8 @@
   .ejercicio-row input.ej-nombre{flex:2; min-width:100px;}
   .ejercicio-row input.ej-num{width:52px; text-align:center;}
   .grupo-row{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:12px 15px; margin-bottom:8px; }
+  .alumno-acciones{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+  .alumno-acciones .btn-borrar-alumno:hover{ color:var(--warn); border-color:var(--warn); }
   .alumno-nombre-link{ background:none; border:none; padding:0; cursor:pointer; text-align:left; font-family:var(--font-body); }
   .alumno-nombre-link:hover .admin-alumno-name{color:var(--accent);}
 
@@ -356,6 +358,7 @@ const CONFIG = {
     { id:"prof_julian", nombre:"Julián Gazzola", telefono:"5493412152232", foto:"" },
   ],
   fondo: "https://iipyhuszlvjcjsncelpy.supabase.co/storage/v1/object/public/portada/1789650560087_Captura_de_pantalla_2026-09-17_100820.png",
+  alumnosOcultos: [],
   frase: "Tu objetivo, nuestro enfoque",
   descripcion: "Sesiones uno a uno con seguimiento real. Sin rutinas genéricas ni esperar turno en la máquina: reservá tu horario y entrená con foco.",
   instagram: "@motus.entrena",
@@ -451,7 +454,7 @@ let state = {
   buscarDni:'',
   isAdmin:false, adminTab:'dashboard', filtroAlumno:'',
   horariosCopiados:null,
-  mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'',
+  mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'', verOcultos:false,
   mostrarNuevoGrupo:false, ngNombre:'',
   adminAlumnoDni:null, adminAlumnoTab:'pagos',
   adminGrupoId:null,
@@ -599,6 +602,45 @@ async function agregarTestimonio(dni, nombreMostrado, texto){
 async function borrarTestimonio(id){
   await sb.from('testimonios').delete().eq('id', id);
   testimonios = testimonios.filter(t=>t.id!==id);
+}
+
+// --- Ocultar / borrar alumnos ---
+function alumnoOculto(dni){ return (CONFIG.alumnosOcultos||[]).includes(dni); }
+async function setAlumnoOculto(dni, oculto){
+  const set = new Set(CONFIG.alumnosOcultos||[]);
+  if(oculto) set.add(dni); else set.delete(dni);
+  CONFIG.alumnosOcultos = [...set];
+  return saveConfig();
+}
+async function borrarAlumno(dni){
+  const falla = (que, error)=>{ console.error('Error borrando alumno ('+que+'):', error); alert('No se pudo borrar el alumno ('+que+'): '+(error && error.message ? error.message : 'error desconocido')); return false; };
+  const hoy = hoyKey(), ahora = Date.now();
+  const futuras = reservas.filter(r=> r.dni===dni && r.estado!=='cancelada' && r.fecha>=hoy);
+  futuras.forEach(r=>{ r.estado='cancelada'; r.canceladaTs=ahora; });
+  const idsEspera = waitlist.filter(w=>w.dni===dni).map(w=>w.id);
+  waitlist = waitlist.filter(w=>w.dni!==dni);
+  const idsDias = rutinaDias.filter(d=>d.dni===dni).map(d=>d.id);
+
+  if(!(await saveReservas(futuras))) return false;
+  if(!(await saveWaitlist(idsEspera))) return false;
+  let r;
+  if(idsDias.length){
+    r = await sb.from('rutina_ejercicios').delete().in('rutina_dia_id', idsDias); if(r.error) return falla('rutina', r.error);
+    r = await sb.from('rutina_dias').delete().eq('dni', dni); if(r.error) return falla('rutina', r.error);
+  }
+  r = await sb.from('registros').delete().eq('dni', dni); if(r.error) return falla('progreso', r.error);
+  r = await sb.from('comprobantes').delete().eq('dni', dni); if(r.error) return falla('comprobantes', r.error);
+  r = await sb.from('perfiles').delete().eq('dni', dni).select();
+  if(r.error) return falla('alumno', r.error);
+  if(!r.data || r.data.length===0) return falla('alumno', { message:'la base de datos no permitió borrarlo (falta permiso de borrado en la tabla perfiles)' });
+
+  delete perfiles[dni];
+  rutinaDias = rutinaDias.filter(d=>d.dni!==dni);
+  rutinaEjercicios = rutinaEjercicios.filter(e=>!idsDias.includes(e.rutinaDiaId));
+  registros = registros.filter(x=>x.dni!==dni);
+  comprobantes = comprobantes.filter(c=>c.dni!==dni);
+  if(alumnoOculto(dni)) await setAlumnoOculto(dni, false);
+  return true;
 }
 
 // --- Grupos ---
@@ -1428,10 +1470,13 @@ function renderAdminHorarios(){
 
 function renderAdminAlumnos(){
   const filtro = state.filtroAlumno.trim().toLowerCase();
-  let lista = Object.values(perfiles);
+  const totalOcultos = Object.values(perfiles).filter(p=>alumnoOculto(p.dni)).length;
+  const verOcultos = state.verOcultos && totalOcultos>0;
+  let lista = Object.values(perfiles).filter(p=> alumnoOculto(p.dni)===verOcultos);
   if(filtro) lista = lista.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.apodo||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro) || (a.telefono||'').includes(filtro));
 
-  const searchBox = `<div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar por nombre, apodo, DNI o teléfono" value="${escapeHtml(state.filtroAlumno)}"></div>`;
+  const searchBox = `<div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar por nombre, apodo, DNI o teléfono" value="${escapeHtml(state.filtroAlumno)}"></div>`
+    + (totalOcultos>0 ? `<div style="margin:-6px 0 14px;"><button class="tiny-btn" id="btnVerOcultos">${verOcultos ? '← Volver a los alumnos' : 'Ver alumnos ocultos ('+totalOcultos+')'}</button></div>` : '');
   const opcionesPlan = [['','Sin plan'], ...Object.entries(CONFIG.planes).map(([id,p])=>[id,p.nombre])];
 
   const bloqueNuevo = state.mostrarNuevoAlumno ? `
@@ -1517,6 +1562,12 @@ function renderAdminAlumnos(){
               <select class="sel-plan" data-dni="${a.dni}">${opcionesPlan.map(([id,nom])=>`<option value="${id}" ${a.plan===id||(!a.plan&&id==='')?'selected':''}>${nom}</option>`).join('')}</select>
             </div>
             ${a.plan==='perso' ? `<div class="alumno-edit-col"><span class="alumno-edit-label">Clases/semana</span><input type="number" min="0" class="inp-perso" data-dni="${a.dni}" value="${a.clasesPersoPorSemana??''}" placeholder="Ej: 3"></div>` : ''}
+          </div>
+          <div class="alumno-acciones">
+            ${alumnoOculto(a.dni)
+              ? `<button class="tiny-btn btn-mostrar-alumno" data-dni="${a.dni}">Mostrar de nuevo</button>`
+              : `<button class="tiny-btn btn-ocultar-alumno" data-dni="${a.dni}">Ocultar</button>`}
+            <button class="tiny-btn btn-borrar-alumno" data-dni="${a.dni}">Borrar alumno</button>
           </div>
         </div>`;
       }).join('')}
@@ -1668,7 +1719,7 @@ function renderAdminGrupoFicha(){
   const g = grupos.find(x=>x.id===state.adminGrupoId);
   if(!g) return `<div class="empty-state">Grupo no encontrado.</div>`;
   const filtro = state.filtroAlumno.trim().toLowerCase();
-  let miembrosPosibles = Object.values(perfiles);
+  let miembrosPosibles = Object.values(perfiles).filter(a=> !alumnoOculto(a.dni) || a.grupoId===g.id);
   if(filtro) miembrosPosibles = miembrosPosibles.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro));
 
   return `
@@ -2238,6 +2289,31 @@ function bindEvents(){
             await savePerfiles();
             render();
           }
+        };
+      });
+      const btnVerOcultos = $('#btnVerOcultos');
+      if(btnVerOcultos) btnVerOcultos.onclick = ()=>{ state.verOcultos = !state.verOcultos; render(); };
+      $$('.btn-ocultar-alumno').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const p = perfiles[btn.dataset.dni]; if(!p) return;
+          if(!confirm(`¿Estás seguro de ocultar a ${p.nombre}?\n\nDeja de aparecer en la lista de alumnos, pero no se borra nada: podés volver a mostrarlo desde "Ver alumnos ocultos".`)) return;
+          await setAlumnoOculto(p.dni, true);
+          render();
+        };
+      });
+      $$('.btn-mostrar-alumno').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const p = perfiles[btn.dataset.dni]; if(!p) return;
+          await setAlumnoOculto(p.dni, false);
+          if(!Object.values(perfiles).some(x=>alumnoOculto(x.dni))) state.verOcultos = false;
+          render();
+        };
+      });
+      $$('.btn-borrar-alumno').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const p = perfiles[btn.dataset.dni]; if(!p) return;
+          if(!confirm(`¿Estás seguro de BORRAR a ${p.nombre}?\n\nSe elimina el alumno junto con su rutina, su progreso y sus comprobantes, y se cancelan sus turnos futuros. Esto NO se puede deshacer.\n\nSi solo querés sacarlo de la lista, usá "Ocultar".`)) return;
+          if(await borrarAlumno(p.dni)) render();
         };
       });
       $$('.btn-ver-ficha').forEach(btn=>{
