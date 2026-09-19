@@ -303,6 +303,11 @@
   .ejercicio-row input.ej-nombre{flex:2; min-width:100px;}
   .ejercicio-row input.ej-num{width:52px; text-align:center;}
   .grupo-row{ display:flex; align-items:center; justify-content:space-between; background:var(--bg-elev); border:1px solid var(--border); border-radius:10px; padding:12px 15px; margin-bottom:8px; }
+  .aviso-cancelacion{ margin:12px 0 4px; padding:12px 14px; border-radius:10px; background:var(--warn-soft); border:1px solid rgba(255,133,119,0.32); }
+  .aviso-titulo{ margin:0 0 4px; font-size:12px; font-weight:700; color:var(--warn); }
+  .aviso-texto{ margin:0 0 10px; font-size:13.5px; line-height:1.45; }
+  .aviso-acciones{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .aviso-acciones .mini-btn svg{ width:14px; height:14px; vertical-align:-2px; margin-right:4px; }
   .alumno-acciones{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
   .alumno-acciones .btn-borrar-alumno:hover{ color:var(--warn); border-color:var(--warn); }
   .alumno-nombre-link{ background:none; border:none; padding:0; cursor:pointer; text-align:left; font-family:var(--font-body); }
@@ -454,7 +459,7 @@ let state = {
   buscarDni:'',
   isAdmin:false, adminTab:'dashboard', filtroAlumno:'',
   horariosCopiados:null,
-  mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'', verOcultos:false,
+  mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'', verOcultos:false, avisoCancelacion:null,
   mostrarNuevoGrupo:false, ngNombre:'',
   adminAlumnoDni:null, adminAlumnoTab:'pagos',
   adminGrupoId:null,
@@ -1374,6 +1379,15 @@ function renderAdminAgenda(){
           return `
             <div class="admin-slot">
               <div class="admin-slot-head"><span class="admin-slot-hora">${s.hora}</span><span class="admin-slot-count">${alumnos.length}/${s.cupoMax} cupos</span></div>
+              ${(state.avisoCancelacion && state.avisoCancelacion.fecha===f.key && state.avisoCancelacion.horaId===s.id) ? `
+                <div class="aviso-cancelacion">
+                  <p class="aviso-titulo">Reserva cancelada</p>
+                  <p class="aviso-texto">Se canceló el turno de <b>${escapeHtml(state.avisoCancelacion.nombre)}</b>. ¿Querés avisarle por WhatsApp?</p>
+                  <div class="aviso-acciones">
+                    <a class="mini-btn ok btn-avisar-wa" href="${waLink(state.avisoCancelacion.tel, mensajeCancelacion(state.avisoCancelacion.nombre, state.avisoCancelacion.dni, state.avisoCancelacion.fecha, state.avisoCancelacion.hora))}" target="_blank" rel="noopener">${icon('wa')} Avisar por WhatsApp</a>
+                    <button class="tiny-btn btn-cerrar-aviso">No, gracias</button>
+                  </div>
+                </div>` : ''}
               <div class="admin-alumnos">
                 ${alumnos.length===0 ? `<p class="admin-alumno-libre">Sin reservas para este horario</p>` : alumnos.map(a=>{
                   const apodo = a.dni && perfiles[a.dni] ? perfiles[a.dni].apodo : '';
@@ -1812,6 +1826,16 @@ function renderAdminPortada(){
   `;
 }
 
+function protegido(btn, fn){
+  return async (...args)=>{
+    if(btn.dataset.ocupado==='1') return;
+    const textoOriginal = btn.textContent;
+    btn.dataset.ocupado='1'; btn.disabled=true; btn.textContent='Guardando…';
+    try{ await fn(...args); }
+    finally{ if(btn.isConnected){ btn.dataset.ocupado='0'; btn.disabled=false; btn.textContent=textoOriginal; } }
+  };
+}
+
 function escapeHtml(str){
   const d = document.createElement('div'); d.textContent = str==null?'':str;
   return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1950,7 +1974,7 @@ function bindEvents(){
     $$('.amigo-tel').forEach(inp=> inp.oninput = e=>{ state.amigos[+e.target.dataset.idx].telefono = e.target.value; });
     $$('.btn-quitar-amigo').forEach(btn=> btn.onclick = ()=>{ state.amigos.splice(+btn.dataset.idx,1); render(); });
 
-    $('#btnConfirmar').onclick = async ()=>{
+    $('#btnConfirmar').onclick = protegido($('#btnConfirmar'), async ()=>{
       const alertBox = $('#formAlert');
       await loadData();
       const { dni, nombre, telefono } = state.identidad;
@@ -1959,8 +1983,9 @@ function bindEvents(){
         const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
         const slot = getSlot(dia, state.slotSel);
         if(!slot){ alertBox.textContent='Ese horario ya no existe.'; alertBox.style.display='block'; return; }
+        if(waitlist.some(w=> w.dni===dni && w.fecha===state.fechaSel && w.horaId===slot.id)){ alertBox.textContent='Ya estás anotado/a en la lista de espera de ese horario.'; alertBox.style.display='block'; return; }
         waitlist.push({ id:uid(), fecha:state.fechaSel, dia, horaId:slot.id, hora:slot.hora, nombre, telefono, dni, ts:Date.now(), estado:'esperando' });
-        await saveWaitlist();
+        if(!(await saveWaitlist())) return;
         state.view='confirmacion'; render();
         return;
       }
@@ -1986,6 +2011,14 @@ function bindEvents(){
         }
       }
 
+      for(const item of state.carrito){
+        if(reservas.some(r=> r.dni===dni && r.fecha===item.fecha && r.horaId===item.horaId && r.estado!=='cancelada')){
+          alertBox.textContent = `Ya tenés reservado el turno del ${formatFechaLarga(item.fecha)} a las ${item.hora}. Podés verlo en "Mi semana".`;
+          alertBox.style.display='block';
+          return;
+        }
+      }
+
       const amigosValidos = state.carrito.length===1 ? state.amigos.filter(a=>a.nombre.trim() && a.telefono.trim()) : [];
       for(const item of state.carrito){
         const slot = getSlot(item.dia, item.horaId);
@@ -2007,9 +2040,9 @@ function bindEvents(){
           reservas.push(deAmigo); nuevasReservas.push(deAmigo);
         });
       });
-      await saveReservas(nuevasReservas);
+      if(!(await saveReservas(nuevasReservas))) return;
       state.view='confirmacion'; render();
-    };
+    });
   }
 
   if(state.view==='confirmacion'){
@@ -2029,14 +2062,14 @@ function bindEvents(){
     };
     const textoEl = $('#inpTestiTexto'); if(textoEl) textoEl.oninput = e=>{ state.testiTexto = e.target.value; };
     const btnEnviar = $('#btnEnviarTesti');
-    if(btnEnviar) btnEnviar.onclick = async ()=>{
+    if(btnEnviar) btnEnviar.onclick = protegido(btnEnviar, async ()=>{
       const texto = (textoEl.value||'').trim();
       const alertBox = $('#testiAlert');
       if(!texto){ alertBox.textContent='Escribí tu comentario antes de publicarlo.'; alertBox.style.display='block'; return; }
       const p = state.testiPerfil;
       await agregarTestimonio(p.dni, nombreSaludo(p.nombre, p.dni), texto);
       state.view='home'; render();
-    };
+    });
   }
 
   if(state.view==='miSemana'){
@@ -2098,7 +2131,7 @@ function bindEvents(){
   }
 
   if(state.view==='admin'){
-    $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; await loadData(); render(); });
+    $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; state.avisoCancelacion=null; await loadData(); render(); });
 
     if(state.adminTab==='agenda'){
       $$('.btn-asistencia').forEach(btn=>{
@@ -2116,9 +2149,11 @@ function bindEvents(){
         btn.onclick = async ()=>{
           if(btn.dataset.armed==='1'){
             const { id, fecha, hora, nombre, tel, dni } = btn.dataset;
-            window.open(waLink(tel, mensajeCancelacion(nombre, dni||null, fecha, hora)), '_blank');
             const r = reservas.find(x=>x.id===id);
-            if(r){ r.estado='cancelada'; r.canceladaTs=Date.now(); await saveReservas([r]); }
+            if(r){
+              r.estado='cancelada'; r.canceladaTs=Date.now();
+              if(await saveReservas([r])) state.avisoCancelacion = { fecha, horaId:r.horaId, hora, nombre, tel, dni: dni||null };
+            }
             render();
           }else{
             $$('.btn-cancel-reserva').forEach(b=>{b.dataset.armed='0'; b.classList.remove('danger-confirm');});
@@ -2126,6 +2161,8 @@ function bindEvents(){
           }
         };
       });
+      $$('.btn-avisar-wa').forEach(a=>{ a.onclick = ()=>{ setTimeout(()=>{ state.avisoCancelacion=null; render(); }, 150); }; });
+      $$('.btn-cerrar-aviso').forEach(b=>{ b.onclick = ()=>{ state.avisoCancelacion=null; render(); }; });
       $$('.btn-ofrecer-espera').forEach(btn=>{
         btn.onclick = ()=>{
           const w = waitlist.find(x=>x.id===btn.dataset.id);
@@ -2420,7 +2457,7 @@ function bindEvents(){
       $$('.reg-extra-peso').forEach(inp=> inp.oninput = e=>{ state.registroExtra[+e.target.dataset.idx].peso = e.target.value===''?null:parseFloat(e.target.value); });
       $$('.btn-quitar-extra').forEach(btn=> btn.onclick = ()=>{ state.registroExtra.splice(+btn.dataset.idx,1); render(); });
       const btnGuardarRegistro = $('#btnGuardarRegistro');
-      if(btnGuardarRegistro) btnGuardarRegistro.onclick = async ()=>{
+      if(btnGuardarRegistro) btnGuardarRegistro.onclick = protegido(btnGuardarRegistro, async ()=>{
         const dni = state.adminAlumnoDni;
         const fecha = ($('#inpRegistroFecha').value) || hoyKey();
         const filas = $$('.ejercicio-row[data-plan-id]');
@@ -2440,7 +2477,7 @@ function bindEvents(){
         }
         state.registroExtra=[];
         render();
-      };
+      });
     }
   }
 
