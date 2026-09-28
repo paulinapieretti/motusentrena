@@ -603,12 +603,16 @@ async function subirFotoProfesor(file, profesorId){
 // --- Testimonios ---
 async function agregarTestimonio(dni, nombreMostrado, texto){
   const row = { id:uid(), dni, nombre_mostrado:nombreMostrado, texto, ts:Date.now() };
-  await sb.from('testimonios').insert(row);
+  const { error } = await sb.from('testimonios').insert(row);
+  if(error){ console.error('Error guardando comentario:', error); alert('No se pudo publicar el comentario: '+error.message); return false; }
   testimonios.push({ id:row.id, dni, nombreMostrado, texto, ts:row.ts });
+  return true;
 }
 async function borrarTestimonio(id){
-  await sb.from('testimonios').delete().eq('id', id);
+  const { error } = await sb.from('testimonios').delete().eq('id', id);
+  if(error){ console.error('Error borrando comentario:', error); alert('No se pudo borrar el comentario: '+error.message); return false; }
   testimonios = testimonios.filter(t=>t.id!==id);
+  return true;
 }
 
 // --- Horarios fijos ---
@@ -632,7 +636,9 @@ async function asegurarReservasFijas(){
       fechas.filter(f=>f.dia===fx.dia).forEach(f=>{
         const slot = getSlot(fx.dia, fx.horaId);
         if(!slot) return;
-        const yaExiste = reservas.some(r=> r.dni===dni && r.fecha===f.key && r.horaId===fx.horaId && r.estado!=='cancelada');
+        // Si ya existe una reserva para esa fecha (activa o cancelada), no se toca: una cancelación puntual
+        // del entrenador para esa semana no debe volver a generarse sola en la próxima carga.
+        const yaExiste = reservas.some(r=> r.dni===dni && r.fecha===f.key && r.horaId===fx.horaId);
         if(yaExiste) return;
         if(cuposLibres(f.key, slot) <= 0) return;
         const nueva = { id:uid(), fecha:f.key, dia:fx.dia, horaId:fx.horaId, hora:fx.hora, nombre:perfil.nombre, telefono:perfil.telefono, dni, estado:'confirmada', ts:Date.now(), grupoId:null };
@@ -1799,13 +1805,19 @@ function renderAdminTurnosAlumno(dni){
     </div>
     <div class="dash-block">
       <h3 class="dash-block-title">Próximos turnos</h3>
-      ${futuros.length===0 ? `<p class="empty-note">No tiene turnos próximos.</p>` : futuros.map(r=>`
+      ${futuros.length===0 ? `<p class="empty-note">No tiene turnos próximos.</p>` : futuros.map(r=>{
+        const esFijo = fijos.some(fx=>fx.dia===r.dia && fx.horaId===r.horaId);
+        return `
         <div class="week-item">
           <div class="week-item-head">
             <span><span class="wi-date">${formatFechaLarga(r.fecha)}</span><br><span class="wi-hora">${r.hora}</span></span>
-            <span class="badge badge-pend">Reservado</span>
+            <span class="badge ${esFijo?'badge-ok':'badge-pend'}">${esFijo?'Fijo':'Reservado'}</span>
           </div>
-        </div>`).join('')}
+          <div class="week-item-actions">
+            <button class="mini-btn warn btn-cancelar-turno-alumno" data-id="${r.id}" style="flex:1;">Cancelar solo esta semana</button>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
   `;
 }
@@ -1923,6 +1935,20 @@ function renderAdminPortada(){
             <div class="alumno-edit-col"><span class="alumno-edit-label">Clases/semana</span><input type="number" min="0" class="plan-field" data-plan="${id}" data-campo="clasesPorSemana" value="${p.clasesPorSemana==null?'':p.clasesPorSemana}" placeholder="${id==='perso'?'lo define el profe':''}"></div>
           </div>
           <div class="field" style="margin-top:8px; margin-bottom:0;"><input type="text" class="plan-field" data-plan="${id}" data-campo="desc" value="${escapeHtml(p.desc)}"></div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="dash-block">
+      <h3 class="dash-block-title">Comentarios de alumnos</h3>
+      ${testimonios.length===0 ? `<p class="empty-note">Todavía no hay comentarios publicados.</p>` : testimonios.slice().sort((a,b)=>b.ts-a.ts).map(t=>`
+        <div class="admin-slot">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div style="min-width:0;">
+              <p style="margin:0 0 4px; font-size:13.5px; line-height:1.5;">"${escapeHtml(t.texto)}"</p>
+              <span style="font-size:12px; color:var(--muted); font-weight:600;">${escapeHtml(t.nombreMostrado)}</span>
+            </div>
+            <button class="icon-btn btn-borrar-testimonio" data-id="${t.id}" title="Borrar comentario">${icon('trash')}</button>
+          </div>
         </div>
       `).join('')}
     </div>
@@ -2171,7 +2197,7 @@ function bindEvents(){
       const alertBox = $('#testiAlert');
       if(!texto){ alertBox.textContent='Escribí tu comentario antes de publicarlo.'; alertBox.style.display='block'; return; }
       const p = state.testiPerfil;
-      await agregarTestimonio(p.dni, nombreSaludo(p.nombre, p.dni), texto);
+      if(!(await agregarTestimonio(p.dni, nombreSaludo(p.nombre, p.dni), texto))) return;
       state.view='home'; render();
     });
   }
@@ -2541,6 +2567,12 @@ function bindEvents(){
           }
         };
       });
+      $$('.btn-borrar-testimonio').forEach(btn=>{
+        btn.onclick = async ()=>{
+          if(!confirm('¿Borrar este comentario? No se puede deshacer.')) return;
+          if(await borrarTestimonio(btn.dataset.id)) render();
+        };
+      });
     }
   }
 
@@ -2685,6 +2717,16 @@ function bindTurnosAlumnoEvents($, $$, dni){
       const lista = horariosFijosDe(dni).slice();
       lista.splice(+btn.dataset.idx, 1);
       await setHorariosFijos(dni, lista);
+      render();
+    };
+  });
+  $$('.btn-cancelar-turno-alumno').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const r = reservas.find(x=>x.id===btn.dataset.id);
+      if(!r) return;
+      if(!confirm(`¿Cancelar el turno del ${formatFechaLarga(r.fecha)} a las ${r.hora}?\n\nSi es parte de un horario fijo, solo se cancela esta semana: las demás semanas siguen reservándose normalmente.`)) return;
+      r.estado='cancelada'; r.canceladaTs=Date.now();
+      await saveReservas([r]);
       render();
     };
   });
