@@ -123,7 +123,6 @@
   .info-link{ display:flex; align-items:center; gap:10px; padding:10px 0; text-decoration:none; color:var(--text); border-bottom:1px solid var(--border); font-size:14px; font-weight:600; }
   .info-link svg{width:18px; height:18px; color:var(--accent);}
   .info-link:last-of-type{border-bottom:none;}
-  .policy-note{ font-size:12.5px; color:var(--muted-2); line-height:1.6; margin-top:16px; }
   .admin-link{ display:inline-block; margin-top:18px; font-size:12.5px; color:var(--muted-2); text-decoration:none; cursor:pointer; border:none; background:none; font-family:var(--font-body); padding:0; }
   .admin-link:hover{color:var(--muted);}
 
@@ -372,7 +371,6 @@ const CONFIG = {
   direccion: "San Juan 912, Rosario",
   adminPin: "2026",
   cierreAnticipacionHoras: 3,
-  politicaCancelacion: "Podés cancelar o reprogramar tu turno hasta 3 horas antes sin cargo. Pasado ese lapso, avisanos por WhatsApp para liberar el cupo a otro alumno.",
 
   // Planes de entrenamiento. "perso" no tiene tope fijo: lo define el profesor por alumno.
   planes: {
@@ -1000,7 +998,6 @@ function renderHome(){
     <div class="info-block">
       <a class="info-link" href="${mapsUrl}" target="_blank" rel="noopener">${icon('pin')} ${CONFIG.direccion}</a>
       <a class="info-link" href="${igUrl}" target="_blank" rel="noopener">${icon('ig')} ${CONFIG.instagram}</a>
-      <p class="policy-note"><b>Política de cancelación:</b> ${CONFIG.politicaCancelacion}</p>
       <button class="admin-link" id="btnAdmin">Panel del profesor</button>
     </div>
   `;
@@ -1784,8 +1781,8 @@ function renderAdminTurnosAlumno(dni){
   const propuestosHtml = state.turnosPropuestos.length>0 ? `
     <div class="plan-banner" style="margin-top:16px;">
       <p class="plan-banner-plan">Turnos agregados en esta visita</p>
-      <p class="plan-banner-msg">${state.turnosPropuestos.map(t=>`${t.dia} ${t.hora}`).join(' · ')}</p>
-      <button class="mini-btn ok" id="btnAsignarFijo" style="margin-top:10px;">Asignar como horario fijo semanal</button>
+      <p class="plan-banner-msg">${state.turnosPropuestos.map(t=>`${t.dia} ${t.hora}`).join(' · ')}<br>Por ahora son solo de esta semana. Si querés que se repitan todas las semanas, elegí la opción de abajo.</p>
+      <button class="mini-btn ok" id="btnAsignarFijo" style="margin-top:10px;">Repetir semanalmente (horario fijo)</button>
     </div>` : '';
 
   const fijosHtml = fijos.length>0 ? `
@@ -1909,7 +1906,6 @@ function renderAdminPortada(){
       <div class="field"><label>Instagram</label><input type="text" class="portada-field" data-campo="instagram" value="${escapeHtml(CONFIG.instagram)}"></div>
       <div class="field"><label>WhatsApp (sin + ni espacios)</label><input type="text" class="portada-field" data-campo="whatsapp" value="${escapeHtml(CONFIG.whatsapp)}"></div>
       <div class="field"><label>Dirección</label><input type="text" class="portada-field" data-campo="direccion" value="${escapeHtml(CONFIG.direccion)}"></div>
-      <div class="field"><label>Política de cancelación</label><input type="text" class="portada-field" data-campo="politicaCancelacion" value="${escapeHtml(CONFIG.politicaCancelacion)}"></div>
     </div>
     <div class="dash-block">
       <h3 class="dash-block-title">Profesores</h3>
