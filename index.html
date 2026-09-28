@@ -621,6 +621,16 @@ async function setHorariosFijos(dni, lista){
   else CONFIG.horariosFijos[dni] = lista;
   return saveConfig();
 }
+// Saca un horario del patrón fijo Y cancela los turnos futuros que ya se habían generado con ese patrón
+// (los que ya pasaron no se tocan). Se usa tanto desde la lista de "Horario fijo" como desde un turno puntual.
+async function eliminarHorarioFijo(dni, dia, horaId){
+  const lista = horariosFijosDe(dni).filter(fx=> !(fx.dia===dia && fx.horaId===horaId));
+  const hoy = hoyKey();
+  const aCancelar = reservas.filter(r=> r.dni===dni && r.dia===dia && r.horaId===horaId && r.estado!=='cancelada' && r.fecha>=hoy);
+  aCancelar.forEach(r=>{ r.estado='cancelada'; r.canceladaTs=Date.now(); });
+  await setHorariosFijos(dni, lista);
+  if(aCancelar.length) await saveReservas(aCancelar);
+}
 async function asegurarReservasFijas(){
   const fijos = CONFIG.horariosFijos || {};
   const dnisConFijo = Object.keys(fijos).filter(dni=> fijos[dni] && fijos[dni].length>0);
@@ -1797,7 +1807,7 @@ function renderAdminTurnosAlumno(dni){
   const fijosHtml = fijos.length>0 ? `
     <div class="dash-block">
       <h3 class="dash-block-title">Horario fijo</h3>
-      ${fijos.map((fx,i)=>`<div class="dash-row"><span>${escapeHtml(fx.dia)} · ${escapeHtml(fx.hora)}</span><button class="icon-btn btn-quitar-fijo" data-idx="${i}" title="Dejar de repetir">${icon('trash')}</button></div>`).join('')}
+      ${fijos.map((fx,i)=>`<div class="dash-row"><span>${escapeHtml(fx.dia)} · ${escapeHtml(fx.hora)}</span><button class="icon-btn btn-quitar-fijo" data-dia="${escapeHtml(fx.dia)}" data-hora-id="${escapeHtml(fx.horaId)}" title="Eliminar horario fijo">${icon('trash')}</button></div>`).join('')}
       <p class="empty-note">Estos turnos se reservan solos cada semana, mientras haya cupo disponible.</p>
     </div>` : '';
 
@@ -1822,6 +1832,7 @@ function renderAdminTurnosAlumno(dni){
           </div>
           <div class="week-item-actions">
             <button class="mini-btn warn btn-cancelar-turno-alumno" data-id="${r.id}" style="flex:1;">Cancelar solo esta semana</button>
+            ${esFijo ? `<button class="mini-btn warn btn-quitar-fijo" data-dia="${escapeHtml(r.dia)}" data-hora-id="${escapeHtml(r.horaId)}" style="flex:1;">Cancelar horario fijo</button>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -2733,10 +2744,10 @@ function bindTurnosAlumnoEvents($, $$, dni){
   });
   $$('.btn-quitar-fijo').forEach(btn=>{
     btn.onclick = async ()=>{
-      if(!confirm('¿Dejar de repetir este turno cada semana?\n\nLos turnos que ya se reservaron no se cancelan, pero no se van a generar más.')) return;
-      const lista = horariosFijosDe(dni).slice();
-      lista.splice(+btn.dataset.idx, 1);
-      await setHorariosFijos(dni, lista);
+      const dia = btn.dataset.dia, horaId = btn.dataset.horaId;
+      const hora = (horariosFijosDe(dni).find(fx=>fx.dia===dia && fx.horaId===horaId)||{}).hora || horaId.split('__')[1] || '';
+      if(!confirm(`¿Eliminar el horario fijo de los ${dia} ${hora}?\n\nSe cancelan los turnos futuros de ese horario que todavía no pasaron, y no se genera ninguno más. Los turnos ya pasados no se tocan.`)) return;
+      await eliminarHorarioFijo(dni, dia, horaId);
       render();
     };
   });
