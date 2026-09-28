@@ -364,6 +364,7 @@ const CONFIG = {
   ],
   fondo: "https://iipyhuszlvjcjsncelpy.supabase.co/storage/v1/object/public/portada/1789650560087_Captura_de_pantalla_2026-09-17_100820.png",
   alumnosOcultos: [],
+  horariosFijos: {},
   frase: "Tu objetivo, nuestro enfoque",
   descripcion: "Sesiones uno a uno con seguimiento real. Sin rutinas genéricas ni esperar turno en la máquina: reservá tu horario y entrená con foco.",
   instagram: "@motus.entrena",
@@ -460,6 +461,7 @@ let state = {
   isAdmin:false, adminTab:'dashboard', filtroAlumno:'',
   horariosCopiados:null,
   mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'', verOcultos:false, avisoCancelacion:null,
+  turnosDiaSel:null, turnosPropuestos:[],
   mostrarNuevoGrupo:false, ngNombre:'',
   adminAlumnoDni:null, adminAlumnoTab:'pagos',
   adminGrupoId:null,
@@ -607,6 +609,39 @@ async function agregarTestimonio(dni, nombreMostrado, texto){
 async function borrarTestimonio(id){
   await sb.from('testimonios').delete().eq('id', id);
   testimonios = testimonios.filter(t=>t.id!==id);
+}
+
+// --- Horarios fijos ---
+function horariosFijosDe(dni){ return (CONFIG.horariosFijos && CONFIG.horariosFijos[dni]) || []; }
+async function setHorariosFijos(dni, lista){
+  CONFIG.horariosFijos = CONFIG.horariosFijos || {};
+  if(lista.length===0) delete CONFIG.horariosFijos[dni];
+  else CONFIG.horariosFijos[dni] = lista;
+  return saveConfig();
+}
+async function asegurarReservasFijas(){
+  const fijos = CONFIG.horariosFijos || {};
+  const dnisConFijo = Object.keys(fijos).filter(dni=> fijos[dni] && fijos[dni].length>0);
+  if(dnisConFijo.length===0) return 0;
+  const fechas = proximasFechas(28);
+  const nuevas = [];
+  dnisConFijo.forEach(dni=>{
+    const perfil = perfiles[dni];
+    if(!perfil) return;
+    fijos[dni].forEach(fx=>{
+      fechas.filter(f=>f.dia===fx.dia).forEach(f=>{
+        const slot = getSlot(fx.dia, fx.horaId);
+        if(!slot) return;
+        const yaExiste = reservas.some(r=> r.dni===dni && r.fecha===f.key && r.horaId===fx.horaId && r.estado!=='cancelada');
+        if(yaExiste) return;
+        if(cuposLibres(f.key, slot) <= 0) return;
+        const nueva = { id:uid(), fecha:f.key, dia:fx.dia, horaId:fx.horaId, hora:fx.hora, nombre:perfil.nombre, telefono:perfil.telefono, dni, estado:'confirmada', ts:Date.now(), grupoId:null };
+        reservas.push(nueva); nuevas.push(nueva);
+      });
+    });
+  });
+  if(nuevas.length) await saveReservas(nuevas);
+  return nuevas.length;
 }
 
 // --- Ocultar / borrar alumnos ---
@@ -1707,14 +1742,83 @@ function renderRegistroYProgreso(dni){
   `;
 }
 
+function renderAdminTurnosAlumno(dni){
+  const perfil = perfiles[dni];
+  const fijos = horariosFijosDe(dni);
+  const misReservas = reservas.filter(r=>r.dni===dni && r.estado!=='cancelada').sort((a,b)=> a.fecha.localeCompare(b.fecha));
+  const hoy = hoyKey();
+  const futuros = misReservas.filter(r=>r.fecha>=hoy);
+
+  const fechas = proximasFechas(14);
+  if(!state.turnosDiaSel || !fechas.some(f=>f.key===state.turnosDiaSel)) state.turnosDiaSel = fechas[0] ? fechas[0].key : null;
+  const diaSel = state.turnosDiaSel;
+  const chips = fechas.map(f=>{
+    const lb = labelFecha(f.dateObj);
+    return `<button class="day-chip ${f.key===diaSel?'active':''}" data-fecha="${f.key}" data-dia="${f.dia}">${lb.top}<small>${lb.bot}</small></button>`;
+  }).join('');
+
+  let listaHorarios = `<p class="empty-note">No hay horarios cargados para este día.</p>`;
+  const diaObj = fechas.find(f=>f.key===diaSel);
+  if(diaObj){
+    const slots = (schedule[diaObj.dia]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
+    if(slots.length>0){
+      listaHorarios = `<div class="time-list">` + slots.map(s=>{
+        const libres = cuposLibres(diaSel, s);
+        const yaTiene = misReservas.some(r=>r.fecha===diaSel && r.horaId===s.id);
+        const full = libres<=0 && !yaTiene;
+        return `
+          <div class="time-card ${yaTiene?'selected':''} ${full?'cerrado':''}" data-slot="${s.id}" data-dia="${diaObj.dia}" data-hora="${s.hora}" data-full="${full}" data-ya="${yaTiene}">
+            <span class="hora">${s.hora}</span>
+            <span class="cupos ${full?'full':''}">${yaTiene?'Ya reservado ✓':(full?'Completo':libres+' cupos')}</span>
+          </div>`;
+      }).join('') + `</div>`;
+    }
+  }
+
+  const propuestosHtml = state.turnosPropuestos.length>0 ? `
+    <div class="plan-banner" style="margin-top:16px;">
+      <p class="plan-banner-plan">Turnos agregados en esta visita</p>
+      <p class="plan-banner-msg">${state.turnosPropuestos.map(t=>`${t.dia} ${t.hora}`).join(' · ')}</p>
+      <button class="mini-btn ok" id="btnAsignarFijo" style="margin-top:10px;">Asignar como horario fijo semanal</button>
+    </div>` : '';
+
+  const fijosHtml = fijos.length>0 ? `
+    <div class="dash-block">
+      <h3 class="dash-block-title">Horario fijo</h3>
+      ${fijos.map((fx,i)=>`<div class="dash-row"><span>${escapeHtml(fx.dia)} · ${escapeHtml(fx.hora)}</span><button class="icon-btn btn-quitar-fijo" data-idx="${i}" title="Dejar de repetir">${icon('trash')}</button></div>`).join('')}
+      <p class="empty-note">Estos turnos se reservan solos cada semana, mientras haya cupo disponible.</p>
+    </div>` : '';
+
+  return `
+    ${fijosHtml}
+    <div class="dash-block">
+      <h3 class="dash-block-title">Agregar turno</h3>
+      <div class="day-chips">${chips}</div>
+      ${listaHorarios}
+      ${propuestosHtml}
+    </div>
+    <div class="dash-block">
+      <h3 class="dash-block-title">Próximos turnos</h3>
+      ${futuros.length===0 ? `<p class="empty-note">No tiene turnos próximos.</p>` : futuros.map(r=>`
+        <div class="week-item">
+          <div class="week-item-head">
+            <span><span class="wi-date">${formatFechaLarga(r.fecha)}</span><br><span class="wi-hora">${r.hora}</span></span>
+            <span class="badge badge-pend">Reservado</span>
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
 function renderAdminAlumnoFicha(){
   const dni = state.adminAlumnoDni;
   const a = perfiles[dni];
   if(!a) return `<div class="empty-state">Alumno no encontrado.</div>`;
-  const tabs = [['pagos','Pagos'],['rutina','Rutina'],['progreso','Progreso']];
+  const tabs = [['turnos','Turnos'],['pagos','Pagos'],['rutina','Rutina'],['progreso','Progreso']];
   const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminAlumnoTab===id?'active':''}" data-atab="${id}">${label}</button>`).join('')}</div>`;
   let body='';
-  if(state.adminAlumnoTab==='pagos') body = renderComprobantesLista(dni,'entrenador');
+  if(state.adminAlumnoTab==='turnos') body = renderAdminTurnosAlumno(dni);
+  else if(state.adminAlumnoTab==='pagos') body = renderComprobantesLista(dni,'entrenador');
   else if(state.adminAlumnoTab==='rutina') body = renderRutinaEditor({dni});
   else body = renderRegistroYProgreso(dni);
 
@@ -2354,7 +2458,7 @@ function bindEvents(){
         };
       });
       $$('.btn-ver-ficha').forEach(btn=>{
-        btn.onclick = ()=>{ state.adminAlumnoDni = btn.dataset.dni; state.adminAlumnoTab='pagos'; state.registroDiaId=''; state.registroExtra=[]; state.view='adminAlumno'; render(); };
+        btn.onclick = ()=>{ state.adminAlumnoDni = btn.dataset.dni; state.adminAlumnoTab='turnos'; state.registroDiaId=''; state.registroExtra=[]; state.turnosDiaSel=null; state.turnosPropuestos=[]; state.view='adminAlumno'; render(); };
       });
       const btnMostrarNuevoGrupo = $('#btnMostrarNuevoGrupo');
       if(btnMostrarNuevoGrupo) btnMostrarNuevoGrupo.onclick = ()=>{ state.mostrarNuevoGrupo=true; state.ngNombre=''; render(); };
@@ -2442,6 +2546,7 @@ function bindEvents(){
 
   if(state.view==='adminAlumno'){
     $$('.admin-tab').forEach(t=> t.onclick = ()=>{ state.adminAlumnoTab = t.dataset.atab; render(); });
+    if(state.adminAlumnoTab==='turnos') bindTurnosAlumnoEvents($, $$, state.adminAlumnoDni);
     if(state.adminAlumnoTab==='pagos') bindComprobanteEvents($$);
     if(state.adminAlumnoTab==='rutina') bindRutinaEditorEvents($, $$, { dni: state.adminAlumnoDni });
     if(state.adminAlumnoTab==='progreso'){
@@ -2541,6 +2646,50 @@ function bindRutinaEditorEvents($, $$, target){
   if(btnDescartarCopiaRutina) btnDescartarCopiaRutina.onclick = ()=>{ state.rutinaCopiada=null; render(); };
 }
 
+function bindTurnosAlumnoEvents($, $$, dni){
+  $$('.day-chip').forEach(chip=>{
+    chip.onclick = ()=>{ state.turnosDiaSel = chip.dataset.fecha; render(); };
+  });
+  $$('.time-card').forEach(card=>{
+    if(card.dataset.full==='true' || card.dataset.ya==='true') return;
+    card.onclick = async ()=>{
+      if(card.dataset.ocupado==='1') return;
+      card.dataset.ocupado='1';
+      const perfil = perfiles[dni];
+      const fecha = state.turnosDiaSel;
+      const dia = card.dataset.dia, horaId = card.dataset.slot, hora = card.dataset.hora;
+      const slot = getSlot(dia, horaId);
+      if(!fecha || !slot || cuposLibres(fecha, slot) <= 0){ alert('Ese horario ya no tiene cupo.'); card.dataset.ocupado='0'; render(); return; }
+      const nueva = { id:uid(), fecha, dia, horaId, hora, nombre:perfil.nombre, telefono:perfil.telefono, dni, estado:'confirmada', ts:Date.now(), grupoId:null };
+      reservas.push(nueva);
+      if(await saveReservas([nueva])){
+        if(!state.turnosPropuestos.some(t=>t.dia===dia && t.horaId===horaId)) state.turnosPropuestos.push({dia, horaId, hora});
+      }
+      render();
+    };
+  });
+  const btnAsignarFijo = $('#btnAsignarFijo');
+  if(btnAsignarFijo) btnAsignarFijo.onclick = protegido(btnAsignarFijo, async ()=>{
+    if(!confirm('¿Asignar estos turnos como horario fijo semanal?\n\n'+state.turnosPropuestos.map(t=>t.dia+' '+t.hora).join('\n')+'\n\nSe van a reservar solos cada semana mientras haya cupo, hasta que los quites.')) return;
+    const actuales = horariosFijosDe(dni);
+    const combinados = actuales.slice();
+    state.turnosPropuestos.forEach(t=>{ if(!combinados.some(c=>c.dia===t.dia && c.horaId===t.horaId)) combinados.push(t); });
+    await setHorariosFijos(dni, combinados);
+    state.turnosPropuestos = [];
+    await asegurarReservasFijas();
+    render();
+  });
+  $$('.btn-quitar-fijo').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!confirm('¿Dejar de repetir este turno cada semana?\n\nLos turnos que ya se reservaron no se cancelan, pero no se van a generar más.')) return;
+      const lista = horariosFijosDe(dni).slice();
+      lista.splice(+btn.dataset.idx, 1);
+      await setHorariosFijos(dni, lista);
+      render();
+    };
+  });
+}
+
 function bindComprobanteEvents($$){
   $$('.inp-comprobante').forEach(inp=>{
     inp.onchange = async ()=>{
@@ -2572,6 +2721,7 @@ async function pegarHorariosEn(diaDestino){
 (async function init(){
   app.innerHTML = `<div class="pad" style="padding-top:60px;color:var(--muted);text-align:center;">Cargando…</div>`;
   await loadData();
+  await asegurarReservasFijas();
   render();
 })();
 </script>
