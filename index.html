@@ -55,7 +55,14 @@
   .back-btn:hover{color:var(--text);}
   .back-btn svg{width:16px;height:16px;}
 
-  .home-top{padding:52px 28px 0;}
+  .home-top{padding:40px 28px 0;}
+  .wa-top{ display:inline-flex; align-items:center; gap:12px; margin:0 0 30px; padding:11px 20px 11px 13px; border-radius:14px; background:#25D366; color:#0b2413; text-decoration:none; box-shadow:0 12px 28px -12px rgba(37,211,102,0.7); transition:transform .15s ease, filter .15s ease; }
+  .wa-top:active{ transform:scale(0.97); }
+  .wa-top svg{ width:32px; height:32px; flex:0 0 auto; }
+  .wa-top-text{ display:flex; flex-direction:column; line-height:1.15; text-align:left; }
+  .wa-top-text small{ font-size:11.5px; font-weight:600; opacity:0.78; }
+  .wa-top-text b{ font-size:18px; font-weight:800; letter-spacing:0.2px; font-variant-numeric:tabular-nums; }
+  @media(hover:hover){ .wa-top:hover{ filter:brightness(1.07); } }
   .brand{ font-family:var(--font-display); font-weight:800; font-size:clamp(44px, 13vw, 66px); line-height:0.86; letter-spacing:-1px; color:var(--text); margin:0; }
   .brand span{color:var(--accent);}
   .tagline{ display:inline-block; font-family:var(--font-display); font-size:15px; font-weight:700; letter-spacing:0.2px; color:var(--accent-2); margin:16px 0 0; padding-bottom:4px; border-bottom:2px solid var(--accent-2); }
@@ -359,7 +366,7 @@
 const CONFIG = {
   nombreEspacio: "MOTUS ENTRENA",
   profesores: [
-    { id:"prof_julian", nombre:"Julián Gazzola", telefono:"5493412152232", foto:"" },
+    { id:"prof_julian", nombre:"Julián Gazzola", foto:"" },
   ],
   fondo: "https://iipyhuszlvjcjsncelpy.supabase.co/storage/v1/object/public/portada/1789650560087_Captura_de_pantalla_2026-09-17_100820.png",
   alumnosOcultos: [],
@@ -367,7 +374,7 @@ const CONFIG = {
   frase: "Tu objetivo, nuestro enfoque",
   descripcion: "Sesiones uno a uno con seguimiento real. Sin rutinas genéricas ni esperar turno en la máquina: reservá tu horario y entrená con foco.",
   instagram: "@motus.entrena",
-  whatsapp: "5493412152232",
+  whatsapp: "5493417218266",
   direccion: "San Juan 912, Rosario",
   adminPin: "2026",
   cierreAnticipacionHoras: 3,
@@ -803,7 +810,12 @@ function mensajeRecordatorio(nombreCompleto, dni){ return `¡Hola ${nombreSaludo
 function mensajeCancelacion(nombreCompleto, dni, fecha, hora){ return `Hola ${nombreSaludo(nombreCompleto,dni)}! Te escribimos de ${CONFIG.nombreEspacio} para avisarte que tuvimos que cancelar tu turno del ${formatFechaLarga(fecha)} a las ${hora}. Cualquier consulta o para reprogramar, contanos por acá.`; }
 function mensajeOfertaEspera(nombreCompleto, dni, fecha, hora){ return `¡Hola ${nombreSaludo(nombreCompleto,dni)}! Se liberó un lugar el ${formatFechaLarga(fecha)} a las ${hora} en ${CONFIG.nombreEspacio} y sos el/la siguiente en la lista de espera. ¿Confirmás que lo tomás? Respondé por acá y te lo reservamos.`; }
 function mensajeCumple(perfil){ return `¡Feliz cumpleaños, ${nombrePreferido(perfil.nombre, perfil.apodo)}! 🎉 Todo el equipo de ${CONFIG.nombreEspacio} te desea un gran día. ¡Nos vemos en el próximo entrenamiento!`; }
-function mensajeContactoProfesor(nombreProfesor){ return `¡Hola ${(nombreProfesor||'').trim().split(/\s+/)[0]}! Te escribo desde la web de ${CONFIG.nombreEspacio}.`; }
+function mensajeConsultaMotus(){ return `¡Hola! Quiero hacer una consulta sobre ${CONFIG.nombreEspacio}.`; }
+function formatearWhatsApp(raw){
+  const d = (raw||'').replace(/\D/g,'');
+  if(d.length===13 && d.startsWith('549')) return `+54 9 ${d.slice(3,7)} ${d.slice(7,9)}-${d.slice(9)}`;
+  return d ? '+'+d : '';
+}
 
 async function upsertPerfil(nombre, telefono, dni){
   const key = normalizarDni(dni);
@@ -952,9 +964,15 @@ function renderHome(){
   const fotos = CONFIG.fotos.length>0
     ? CONFIG.fotos.map(f=>`<div class="foto-item"><img src="${f}" alt="Motus Entrena"></div>`).join('')
     : Array(3).fill(`<div class="foto-item">${icon('users')}</div>`).join('');
+  const waDigitos = (CONFIG.whatsapp||'').replace(/\D/g,'');
+  const waTop = waDigitos ? `
+      <a class="wa-top" href="https://wa.me/${waDigitos}?text=${encodeURIComponent(mensajeConsultaMotus())}" target="_blank" rel="noopener">
+        ${icon('wa')}
+        <span class="wa-top-text"><small>Consultas por WhatsApp</small><b>${formatearWhatsApp(waDigitos)}</b></span>
+      </a>` : '';
 
   return `
-    <div class="home-top">
+    <div class="home-top">${waTop}
       <h1 class="brand">${marca}</h1>
       <p class="tagline">${CONFIG.frase}</p>
       <div class="hero-icons">
@@ -1001,7 +1019,6 @@ function renderHome(){
           <div class="profesor-row">
             <div class="profesor-foto">${p.foto ? `<img src="${p.foto}" alt="${escapeHtml(p.nombre)}">` : icon('users')}</div>
             <p class="profesor-nombre">${escapeHtml(p.nombre)}</p>
-            ${p.telefono ? `<a class="icon-btn" href="${waLink(p.telefono, mensajeContactoProfesor(p.nombre))}" target="_blank" rel="noopener" title="Escribir por WhatsApp">${icon('wa')}</a>` : ''}
           </div>`).join('')}
       </div>
     </div>
@@ -1910,7 +1927,6 @@ function renderAdminPortada(){
         <div class="profesor-foto" style="width:52px; height:52px;">${p.foto ? `<img src="${p.foto}" alt="">` : icon('users')}</div>
         <div style="flex:1; display:flex; flex-direction:column; gap:6px; min-width:0;">
           <input type="text" class="profesor-field" data-id="${p.id}" data-campo="nombre" value="${escapeHtml(p.nombre)}" placeholder="Nombre y apellido">
-          <input type="text" class="profesor-field" data-id="${p.id}" data-campo="telefono" value="${escapeHtml(p.telefono)}" placeholder="WhatsApp (ej: 5493412152232)">
         </div>
         <button class="icon-btn btn-borrar-profesor" data-id="${p.id}" title="Eliminar profesor">${icon('trash')}</button>
       </div>
@@ -1925,7 +1941,7 @@ function renderAdminPortada(){
       <div class="field"><label>Frase</label><input type="text" class="portada-field" data-campo="frase" value="${escapeHtml(CONFIG.frase)}"></div>
       <div class="field"><label>Descripción</label><input type="text" class="portada-field" data-campo="descripcion" value="${escapeHtml(CONFIG.descripcion)}"></div>
       <div class="field"><label>Instagram</label><input type="text" class="portada-field" data-campo="instagram" value="${escapeHtml(CONFIG.instagram)}"></div>
-      <div class="field"><label>WhatsApp (sin + ni espacios)</label><input type="text" class="portada-field" data-campo="whatsapp" value="${escapeHtml(CONFIG.whatsapp)}"></div>
+      <div class="field"><label>WhatsApp de MOTUS (sin + ni espacios)</label><input type="text" class="portada-field" data-campo="whatsapp" value="${escapeHtml(CONFIG.whatsapp)}"></div>
       <div class="field"><label>Dirección</label><input type="text" class="portada-field" data-campo="direccion" value="${escapeHtml(CONFIG.direccion)}"></div>
     </div>
     <div class="dash-block">
@@ -2568,7 +2584,7 @@ function bindEvents(){
       });
       const btnAgregarProfesor = $('.btn-agregar-profesor');
       if(btnAgregarProfesor) btnAgregarProfesor.onclick = async ()=>{
-        CONFIG.profesores.push({ id:uid(), nombre:'', telefono:'', foto:'' });
+        CONFIG.profesores.push({ id:uid(), nombre:'', foto:'' });
         await saveConfig();
         render();
       };
