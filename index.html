@@ -377,7 +377,7 @@ const CONFIG = {
   whatsapp: "5493417218266",
   direccion: "San Juan 912, Rosario",
   adminPin: "2026",
-  cierreAnticipacionHoras: 3,
+  cierreAnticipacionMinutos: 30,
 
   // Planes de entrenamiento. "perso" no tiene tope fijo: lo define el profesor por alumno.
   planes: {
@@ -437,7 +437,7 @@ function slotCerrado(fecha, horaStr){
   const [y,m,dd] = fecha.split('-').map(Number);
   const [hh,mm] = horaStr.split(':').map(Number);
   const slotDate = new Date(y,m-1,dd,hh,mm);
-  const limite = new Date(Date.now() + CONFIG.cierreAnticipacionHoras*3600*1000);
+  const limite = new Date(Date.now() + CONFIG.cierreAnticipacionMinutos*60*1000);
   return slotDate < limite;
 }
 function inicioSemana(d){ const r=new Date(d); const dow=r.getDay(); const diff = dow===0?-6:1-dow; r.setDate(r.getDate()+diff); r.setHours(0,0,0,0); return r; }
