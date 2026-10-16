@@ -917,7 +917,7 @@ function solicitudesPendientes(){ return Object.values(perfiles).filter(p=>p.cre
 
 const MSG_SIN_APROBAR = 'Tu registro no está aprobado, así que por ahora no podés sacar turno. Escribinos por WhatsApp y lo resolvemos.';
 function mensajeSolicitudRegistro(nombre, dni){ return `¡Hola! Soy ${nombre} (DNI ${dni}). Pedí mi registro en ${CONFIG.nombreEspacio} desde la web. ¿Me lo pueden aprobar para empezar a sacar turnos?`; }
-function mensajeAprobacion(nombre){ return `¡Hola ${nombrePreferido(nombre,'')}! Te escribimos de ${CONFIG.nombreEspacio} 💪. Ya aprobamos tu registro: entrá a ${CONFIG.urlSitio}, poné tu DNI y reservá tu primera clase. ¡Te esperamos!`; }
+function mensajeAprobacion(nombre){ return `¡Hola ${nombrePreferido(nombre,'')}! Te escribimos de ${CONFIG.nombreEspacio}. Ya aprobamos tu registro: entrá a ${CONFIG.urlSitio}, poné tu DNI y reservá tu primera clase. ¡Te esperamos!`; }
 
 // Devuelve el perfil creado, 'existe' si ese DNI apareció justo en el medio, o null si falló.
 async function solicitarRegistro(nombre, telefono, dni){
@@ -1089,13 +1089,14 @@ function pideRenovacion(e){ return !!e && e.tipo==='abono' && e.avisos.some(a=> 
 function mensajeRenovarAlumno(nombre, dni){ return `¡Hola! Soy ${nombre} (DNI ${dni}). Quiero renovar mi abono en ${CONFIG.nombreEspacio}.`; }
 function mensajeAbonoClases(perfil, e){
   if(!e || e.tipo!=='abono' || e.D<0 || !(e.quedan>0)) return null;
-  return `¡Hola ${nombreSaludo(perfil.nombre, perfil.dni)}! Te escribimos de ${CONFIG.nombreEspacio} 💪. Tu abono ${fraseVence(e)} y te ${e.quedan===1 ? 'queda 1 clase' : `quedan ${e.quedan} clases`} por usar${e.R>0 ? ` (ya tenés ${e.R} reservada${e.R===1?'':'s'})` : ''}. ¡Reservá tus turnos para no perderlas! Entrá a ${CONFIG.urlSitio} y poné tu DNI.`;
+  return `¡Hola ${nombreSaludo(perfil.nombre, perfil.dni)}! Te escribimos de ${CONFIG.nombreEspacio}. Te recordamos que tu abono ${fraseVence(e)} y te ${e.quedan===1 ? 'queda 1 clase' : `quedan ${e.quedan} clases`} por usar${e.R>0 ? ` (ya tenés ${e.R} reservada${e.R===1?'':'s'})` : ''}. ¡Te esperamos para que las aproveches! Reservá tus turnos en ${CONFIG.urlSitio} con tu DNI.`;
 }
 function mensajeAbonoPago(perfil, e){
-  const hola = `¡Hola ${nombreSaludo(perfil.nombre, perfil.dni)}! Te escribimos de ${CONFIG.nombreEspacio} 💪. `;
-  if(e.D<0) return hola + `Tu abono venció el ${fechaCorta(e.vence)}. Para seguir entrenando hay que renovarlo: escribinos y lo coordinamos.`;
-  if(e.quedan===0) return hola + `Ya usaste las ${e.total} clases de tu abono (vence el ${fechaCorta(e.vence)}). Para seguir entrenando hay que renovarlo: escribinos y lo coordinamos.`;
-  return hola + `Tu abono ${fraseVence(e)}. Para seguir entrenando sin cortes, avisanos cuando lo renueves.`;
+  const hola = `¡Hola ${nombreSaludo(perfil.nombre, perfil.dni)}! Te escribimos de ${CONFIG.nombreEspacio}. `;
+  const cierre = ' ¡Renovalo para seguir entrenando con nosotros! Cualquier duda, escribinos.';
+  if(e.D<0) return hola + `Te recordamos que tu abono venció el ${fechaCorta(e.vence)}.` + cierre;
+  if(e.quedan===0) return hola + `Ya usaste las ${e.total} clases de tu abono (vence el ${fechaCorta(e.vence)}).` + cierre;
+  return hola + `Te recordamos que tu abono ${fraseVence(e)}.` + cierre;
 }
 
 const ABONO_RANGO = { vencido:0, sinClases:1, porVencer:2, ultimas:3, sobran:4, ok:5 };
