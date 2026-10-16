@@ -1779,7 +1779,7 @@ function renderAdminDashboard(){
     ${nSinMarcar>0 ? `
       <div class="aviso-solicitudes">
         <p class="aviso-titulo">${nSinMarcar===1 ? '1 clase sin marcar asistencia' : nSinMarcar+' clases sin marcar asistencia'}</p>
-        <p class="aviso-texto">Marcá si asistieron o faltaron: se usa para controlar los abonos.</p>
+        <p class="aviso-texto">Marcá si asistieron o faltaron.</p>
         <div class="aviso-acciones"><button class="mini-btn ok" id="btnIrAsistencia">Marcar asistencia</button></div>
       </div>` : ''}
     ${nAvisos>0 ? `
@@ -1862,7 +1862,7 @@ function renderClasesSinMarcar(){
   return `
     <div class="admin-day-group">
       <div class="admin-day-title-row"><h3 class="admin-day-title">Clases sin marcar (${lista.length})</h3></div>
-      <p class="empty-note" style="margin:0 0 10px;">Clases de los últimos 30 días sin asistencia cargada. Cuenta para el abono: si reservó y faltó sin cancelar, la clase se da por perdida.</p>
+      <p class="empty-note" style="margin:0 0 10px;">Clases de los últimos 30 días sin asistencia cargada.</p>
       ${lista.map(r=>`
         <div class="admin-slot asist-fila">
           <div><span class="admin-alumno-name">${escapeHtml(r.nombre)}</span><br><span class="admin-alumno-tel">${formatFechaLarga(r.fecha)} · ${r.hora}</span></div>
@@ -1885,7 +1885,7 @@ function renderAsistenciaAlumno(dni){
   return `
     <div class="admin-day-group">
       <div class="admin-day-title-row"><h3 class="admin-day-title">Sin marcar${pend.length>0 ? ' ('+pend.length+')' : ''}</h3></div>
-      ${pend.length===0 ? `<p class="empty-note">No hay clases pasadas sin marcar.</p>` : `<p class="empty-note" style="margin:0 0 10px;">Marcá si asistió o faltó, aunque la clase sea vieja. Si reservó y faltó sin cancelar, la clase se da por perdida.</p>` + pend.map(fila).join('')}
+      ${pend.length===0 ? `<p class="empty-note">No hay clases pasadas sin marcar.</p>` : `<p class="empty-note" style="margin:0 0 10px;">Marcá si asistió o faltó, aunque la clase sea vieja.</p>` + pend.map(fila).join('')}
     </div>
     <div class="admin-day-group">
       <div class="admin-day-title-row"><h3 class="admin-day-title">Últimas 8 semanas</h3></div>
