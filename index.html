@@ -133,6 +133,11 @@
   .abono-filtro{ background:none; border:1px solid var(--border-strong); color:var(--muted); border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-body); }
   .abono-filtro b{ font-weight:800; margin-left:4px; }
   .abono-filtro.activo{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .asist-fila{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .asist-botones{ display:flex; gap:6px; flex-shrink:0; }
+  .mini-btn.ok.activo{ background:var(--ok); color:#06241a; }
+  .mini-btn.warn.activo{ background:var(--warn); color:#2b0d09; }
+  .link-btn{ background:none; border:none; padding:0; color:var(--accent); text-decoration:underline; cursor:pointer; font:inherit; }
   .rutina-fotos{ margin-bottom:22px; }
   .rutina-fotos-title{ font-family:var(--font-display); font-size:19px; font-weight:700; margin:0 0 6px; }
   .abono-aviso{ padding:9px 12px; border-radius:9px; font-size:13px; line-height:1.5; margin-bottom:10px; background:var(--accent-soft); border:1px solid rgba(169,184,255,0.22); color:var(--accent); }
@@ -1764,8 +1769,15 @@ function renderAdminDashboard(){
   const huecos = huecosLibres(6);
   const nPendientes = solicitudesPendientes().length;
   const nAvisos = abonosDeAlumnos().filter(x=> x.e.tipo==='abono' && x.e.avisos.length>0).length;
+  const nSinMarcar = clasesSinMarcar(null, fechaKey(addDays(new Date(), -30))).length;
 
   return `
+    ${nSinMarcar>0 ? `
+      <div class="aviso-solicitudes">
+        <p class="aviso-titulo">${nSinMarcar===1 ? '1 clase sin marcar asistencia' : nSinMarcar+' clases sin marcar asistencia'}</p>
+        <p class="aviso-texto">Marcá si asistieron o faltaron: se usa para controlar los abonos.</p>
+        <div class="aviso-acciones"><button class="mini-btn ok" id="btnIrAsistencia">Marcar asistencia</button></div>
+      </div>` : ''}
     ${nAvisos>0 ? `
       <div class="aviso-solicitudes">
         <p class="aviso-titulo">${nAvisos===1 ? '1 alumno para avisar' : nAvisos+' alumnos para avisar'}</p>
@@ -1814,10 +1826,73 @@ function renderAdminDashboard(){
   `;
 }
 
+// --- Asistencia: las clases pasadas sin marcar se pueden marcar aunque sean viejas ---
+function clasesSinMarcar(dni, desdeKey){
+  const hoy = hoyKey();
+  return reservas.filter(r=> r.estado!=='cancelada' && (r.asistio===null || r.asistio===undefined) && r.fecha<hoy && (!dni || r.dni===dni) && (!desdeKey || r.fecha>=desdeKey))
+    .sort((a,b)=> b.fecha.localeCompare(a.fecha) || (b.hora||'').localeCompare(a.hora||''));
+}
+// Dos botones; el que está activo se vuelve a tocar para dejar la clase sin marcar.
+function botonesAsistencia(r){
+  return `<span class="asist-botones">
+    <button class="mini-btn btn-asistencia ${r.asistio===true?'ok activo':''}" data-id="${r.id}" data-valor="${r.asistio===true?'null':'true'}">${r.asistio===true?'✓ ':''}Asistió</button>
+    <button class="mini-btn btn-asistencia ${r.asistio===false?'warn activo':''}" data-id="${r.id}" data-valor="${r.asistio===false?'null':'false'}">${r.asistio===false?'✗ ':''}Faltó</button>
+  </span>`;
+}
+function bindAsistenciaEvents($$){
+  $$('.btn-asistencia').forEach(btn=>{
+    btn.onclick = protegido(btn, async ()=>{
+      const r = reservas.find(x=>x.id===btn.dataset.id);
+      if(!r) return;
+      const antes = [r.asistio, r.asistioTs];
+      r.asistio = btn.dataset.valor==='null' ? null : (btn.dataset.valor==='true');
+      r.asistioTs = Date.now();
+      if(!(await saveReservas([r]))){ r.asistio = antes[0]; r.asistioTs = antes[1]; }
+      render();
+    }, 'Guardando…');
+  });
+}
+function renderClasesSinMarcar(){
+  const lista = clasesSinMarcar(null, fechaKey(addDays(new Date(), -30)));
+  if(lista.length===0) return '';
+  return `
+    <div class="admin-day-group">
+      <div class="admin-day-title-row"><h3 class="admin-day-title">Clases sin marcar (${lista.length})</h3></div>
+      <p class="empty-note" style="margin:0 0 10px;">Clases de los últimos 30 días sin asistencia cargada. Cuenta para el abono: si reservó y faltó sin cancelar, la clase se da por perdida.</p>
+      ${lista.map(r=>`
+        <div class="admin-slot asist-fila">
+          <div><span class="admin-alumno-name">${escapeHtml(r.nombre)}</span><br><span class="admin-alumno-tel">${formatFechaLarga(r.fecha)} · ${r.hora}</span></div>
+          ${botonesAsistencia(r)}
+        </div>`).join('')}
+    </div>`;
+}
+function renderAsistenciaAlumno(dni){
+  const hoy = hoyKey();
+  const desde = fechaKey(addDays(new Date(), -56));
+  const pend = clasesSinMarcar(dni);
+  const ids = new Set(pend.map(r=>r.id));
+  const hist = reservas.filter(r=> r.dni===dni && r.estado!=='cancelada' && r.fecha<=hoy && r.fecha>=desde && !ids.has(r.id))
+    .sort((a,b)=> b.fecha.localeCompare(a.fecha) || (b.hora||'').localeCompare(a.hora||''));
+  const fila = r=>`
+    <div class="admin-slot asist-fila">
+      <div><span class="admin-alumno-name">${formatFechaLarga(r.fecha)}</span><br><span class="admin-alumno-tel">${r.hora}${r.fecha===hoy?' · hoy':''}</span></div>
+      ${botonesAsistencia(r)}
+    </div>`;
+  return `
+    <div class="admin-day-group">
+      <div class="admin-day-title-row"><h3 class="admin-day-title">Sin marcar${pend.length>0 ? ' ('+pend.length+')' : ''}</h3></div>
+      ${pend.length===0 ? `<p class="empty-note">No hay clases pasadas sin marcar.</p>` : `<p class="empty-note" style="margin:0 0 10px;">Marcá si asistió o faltó, aunque la clase sea vieja. Si reservó y faltó sin cancelar, la clase se da por perdida.</p>` + pend.map(fila).join('')}
+    </div>
+    <div class="admin-day-group">
+      <div class="admin-day-title-row"><h3 class="admin-day-title">Últimas 8 semanas</h3></div>
+      ${hist.length===0 ? `<p class="empty-note">Todavía no hay clases marcadas.</p>` : hist.map(fila).join('')}
+    </div>`;
+}
+
 function renderAdminAgenda(){
   const fechas = proximasFechas(14);
   if(fechas.length===0) return `<div class="empty-state">No hay horarios cargados.</div>`;
-  return fechas.map(f=>{
+  return renderClasesSinMarcar() + fechas.map(f=>{
     const slots = (schedule[f.dia]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
     if(slots.length===0) return '';
     return `
@@ -1846,10 +1921,10 @@ function renderAdminAgenda(){
                   const asistCtrl = a.asistio===true
                     ? `<button class="mini-btn ok btn-asistencia" data-id="${a.id}" data-valor="null">✓ Asistió</button>`
                     : a.asistio===false
-                      ? `<button class="mini-btn warn btn-asistencia" data-id="${a.id}" data-valor="null">✗ Ausente</button>`
+                      ? `<button class="mini-btn warn btn-asistencia" data-id="${a.id}" data-valor="null">✗ Faltó</button>`
                       : `<span style="display:flex; gap:4px;">
                           <button class="mini-btn ok btn-asistencia" data-id="${a.id}" data-valor="true">Asistió</button>
-                          <button class="mini-btn warn btn-asistencia" data-id="${a.id}" data-valor="false">Ausente</button>
+                          <button class="mini-btn warn btn-asistencia" data-id="${a.id}" data-valor="false">Faltó</button>
                         </span>`;
                   return `
                   <div class="admin-alumno" data-reserva="${a.id}" style="flex-direction:column; align-items:stretch; gap:6px;">
@@ -2017,7 +2092,7 @@ function renderAbonoCard(p, e){
           <span>Le quedan <b>${e.quedan}</b></span>
           <span><b>${textoDias(e)}</b></span>
         </div>
-        <div class="abono-stats">${e.R} reservadas · ${e.disponibles} sin reservar · ${e.S} sin marcar${e.F>0 ? ` · ${e.F} faltó` : ''}</div>`;
+        <div class="abono-stats">${e.R} reservadas · ${e.disponibles} sin reservar · ${e.S>0 ? `<button class="link-btn btn-ir-asistencia" data-dni="${dni}">${e.S} sin marcar</button>` : '0 sin marcar'}${e.F>0 ? ` · ${e.F} faltó` : ''}</div>`;
     }else{
       cuerpo = `<div class="abono-stats-prof"><span><b>${textoDias(e)}</b></span></div>
         <p class="abono-nota">Sin número de clases definido: se controlan solo las fechas. Podés cargarlo en "Editar".</p>`;
@@ -2067,6 +2142,13 @@ function renderAdminAbonos(){
 }
 
 function bindAbonoCardEvents($, $$){
+  $$('.btn-ir-asistencia').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.adminAlumnoDni = btn.dataset.dni; state.adminAlumnoTab = 'asistencia';
+      state.registroDiaId=''; state.registroExtra=[]; state.turnosDiaSel=null; state.turnosPropuestos=[]; state.turnosCarrito=[];
+      state.view = 'adminAlumno'; render();
+    };
+  });
   $$('.btn-guardar-abono').forEach(btn=>{
     btn.onclick = protegido(btn, async ()=>{
       const dni = btn.dataset.dni;
@@ -2413,10 +2495,12 @@ function renderAdminAlumnoFicha(){
   const dni = state.adminAlumnoDni;
   const a = perfiles[dni];
   if(!a) return `<div class="empty-state">Alumno no encontrado.</div>`;
-  const tabs = [['turnos','Turnos'],['pagos','Pagos'],['rutina','Rutina'],['progreso','Progreso']];
-  const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminAlumnoTab===id?'active':''}" data-atab="${id}">${label}</button>`).join('')}</div>`;
+  const tabs = [['turnos','Turnos'],['asistencia','Asistencia'],['pagos','Pagos'],['rutina','Rutina'],['progreso','Progreso']];
+  const nSinMarcar = clasesSinMarcar(dni).length;
+  const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminAlumnoTab===id?'active':''}" data-atab="${id}">${label}${id==='asistencia' && nSinMarcar>0 ? ` <span class="tab-badge" title="${nSinMarcar} sin marcar">${nSinMarcar}</span>` : ''}</button>`).join('')}</div>`;
   let body='';
   if(state.adminAlumnoTab==='turnos') body = renderAdminTurnosAlumno(dni);
+  else if(state.adminAlumnoTab==='asistencia') body = renderAsistenciaAlumno(dni);
   else if(state.adminAlumnoTab==='pagos') body = renderComprobantesLista(dni,'entrenador');
   else if(state.adminAlumnoTab==='rutina') body = renderRutinaFotos(dni,'entrenador') + renderRutinaEditor({dni});
   else body = renderRegistroYProgreso(dni);
@@ -2889,23 +2973,15 @@ function bindEvents(){
 
   if(state.view==='admin'){
     $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; state.avisoCancelacion=null; state.avisoAprobacion=null; await loadData(); render(); });
+    const btnIrAsistencia = $('#btnIrAsistencia');
+    if(btnIrAsistencia) btnIrAsistencia.onclick = async ()=>{ state.adminTab='agenda'; await loadData(); render(); };
     const btnIrAbonos = $('#btnIrAbonos');
     if(btnIrAbonos) btnIrAbonos.onclick = async ()=>{ state.adminTab='abonos'; state.abonoGrupo='todos'; state.filtroAbono=''; await loadData(); render(); };
     const btnIrSolicitudes = $('#btnIrSolicitudes');
     if(btnIrSolicitudes) btnIrSolicitudes.onclick = async ()=>{ state.adminTab='alumnos'; state.verOcultos=false; state.filtroAlumno=''; await loadData(); render(); };
 
     if(state.adminTab==='agenda'){
-      $$('.btn-asistencia').forEach(btn=>{
-        btn.onclick = async ()=>{
-          const r = reservas.find(x=>x.id===btn.dataset.id);
-          if(!r) return;
-          const valor = btn.dataset.valor;
-          r.asistio = valor==='null' ? null : (valor==='true');
-          r.asistioTs = Date.now();
-          await saveReservas([r]);
-          render();
-        };
-      });
+      bindAsistenciaEvents($$);
       $$('.btn-cancel-reserva').forEach(btn=>{
         btn.onclick = async ()=>{
           if(btn.dataset.armed==='1'){
@@ -3248,6 +3324,7 @@ function bindEvents(){
   if(state.view==='adminAlumno'){
     bindAbonoCardEvents($, $$);
     $$('.admin-tab').forEach(t=> t.onclick = ()=>{ state.adminAlumnoTab = t.dataset.atab; render(); });
+    if(state.adminAlumnoTab==='asistencia') bindAsistenciaEvents($$);
     if(state.adminAlumnoTab==='turnos') bindTurnosAlumnoEvents($, $$, state.adminAlumnoDni);
     if(state.adminAlumnoTab==='pagos') bindComprobanteEvents($$);
     if(state.adminAlumnoTab==='rutina'){ bindRutinaFotoEvents($$); bindRutinaEditorEvents($, $$, { dni: state.adminAlumnoDni }); }
