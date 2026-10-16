@@ -917,6 +917,124 @@ function mensajePlanEstado(perfil, fechaRef, excludeId){
   return { texto, bloqueado: restantes<=0, plan:nombrePlan(perfil), limite, usadas, restantes };
 }
 
+/* ABONOS:START */
+// --- Abonos: 30 días desde la fecha de pago (vence el mismo día del mes siguiente) ---
+const ABONO_DIAS_POR_VENCER = 5, ABONO_ULTIMAS_CLASES = 2, ABONO_SOBRAN_DIAS = 14, ABONO_SOBRAN_MARGEN = 2;
+
+function sumarUnMes(key){
+  const [y,m,d] = key.split('-').map(Number);
+  const ny = m===12 ? y+1 : y, nm = m===12 ? 1 : m+1;
+  const ultimo = new Date(ny, nm, 0).getDate();
+  return ny+'-'+pad2(nm)+'-'+pad2(Math.min(d, ultimo));
+}
+function diasEntre(aKey, bKey){ return Math.round((parseFechaKey(bKey) - parseFechaKey(aKey)) / 86400000); }
+function fechaCorta(key){ const p = key.split('-'); return p[2]+'/'+p[1]; }
+function abonoDe(dni){ return (CONFIG.abonos && CONFIG.abonos[dni]) || null; }
+
+// Clases del abono: las propias del alumno, si no las del plan (por abono), y en PERSO lo que tenga cargado por semana × 4.
+function totalClasesAbono(perfil){
+  if(!perfil || !perfil.plan) return null;
+  const ab = abonoDe(perfil.dni);
+  if(ab && ab.clases>0) return ab.clases;
+  const plan = CONFIG.planes[perfil.plan];
+  if(plan && plan.clasesPorAbono>0) return plan.clasesPorAbono;
+  if(perfil.plan==='perso' && perfil.clasesPersoPorSemana>0) return perfil.clasesPersoPorSemana*4;
+  return null;
+}
+// Rige el abono (y dejan de regir las semanas) solo con plan + fecha de pago + clases definidas.
+function usaAbono(perfil){
+  const ab = perfil && abonoDe(perfil.dni);
+  return !!perfil && !!perfil.plan && !!ab && !!ab.pago && totalClasesAbono(perfil)!=null;
+}
+function fraseVence(e){
+  if(e.D<0) return `venció el ${fechaCorta(e.vence)}`;
+  if(e.D===0) return 'vence hoy';
+  if(e.D===1) return 'vence mañana';
+  return `vence en ${e.D} días (el ${fechaCorta(e.vence)})`;
+}
+
+function estadoAbono(perfil, hoy, lista){
+  if(!perfil || !perfil.plan) return { tipo:'sinPlan' };
+  const total = totalClasesAbono(perfil);
+  const ab = abonoDe(perfil.dni);
+  if(!ab || !ab.pago) return { tipo:'sinFecha', plan:nombrePlan(perfil), total };
+  const pago = ab.pago, vence = sumarUnMes(pago), D = diasEntre(hoy, vence);
+  const e = { tipo:'abono', plan:nombrePlan(perfil), pago, vence, D, total, A:0, F:0, S:0, R:0, usadas:0, quedan:null, disponibles:null, avisos:[] };
+  (lista || reservas).forEach(r=>{
+    if(r.dni!==perfil.dni || r.estado==='cancelada' || r.fecha<pago || r.fecha>vence) return;
+    if(r.asistio===true) e.A++; else if(r.asistio===false) e.F++; else if(r.fecha<hoy) e.S++; else e.R++;
+  });
+  e.usadas = e.A + e.F + e.S;
+  if(total!=null){ e.quedan = Math.max(0, total - e.usadas); e.disponibles = Math.max(0, total - e.usadas - e.R); }
+  if(D<0) e.avisos.push('vencido');
+  else{
+    if(total!=null && e.quedan===0) e.avisos.push('sinClases');
+    if(D<=ABONO_DIAS_POR_VENCER) e.avisos.push('porVencer');
+    if(total!=null && e.quedan>=1 && e.quedan<=ABONO_ULTIMAS_CLASES) e.avisos.push('ultimas');
+    if(total!=null && D<=ABONO_SOBRAN_DIAS && e.disponibles >= Math.round(total*D/30) + ABONO_SOBRAN_MARGEN) e.avisos.push('sobran');
+  }
+  e.estado = e.avisos[0] || 'ok';
+  return e;
+}
+
+// Bloqueo al alumno. extra = clases que ya tiene elegidas en el carrito dentro de este abono.
+function chequearAbono(perfil, fecha, opts){
+  if(!usaAbono(perfil)) return { ok:true };
+  const o = opts || {};
+  const lista = o.excluirId ? reservas.filter(r=>r.id!==o.excluirId) : reservas;
+  const e = estadoAbono(perfil, hoyKey(), lista);
+  if(fecha < e.pago) return { ok:false, msg:`Tu abono empieza el ${fechaCorta(e.pago)}.` };
+  if(fecha > e.vence){
+    return { ok:false, msg: e.D<0
+      ? `Tu abono venció el ${fechaCorta(e.vence)}. Renovalo para seguir reservando.`
+      : `Tu abono vence el ${fechaCorta(e.vence)}; ese día queda fuera. Renovalo para reservar después.` };
+  }
+  if(e.disponibles - (o.extra||0) <= 0){
+    return { ok:false, msg:`Ya usaste o reservaste las ${e.total} clases de tu abono (hasta el ${fechaCorta(e.vence)}). Para seguir entrenando, renová tu abono.` };
+  }
+  return { ok:true };
+}
+
+function avisosAlumno(e){
+  if(!e || e.tipo!=='abono') return [];
+  const q = e.quedan;
+  const texto = {
+    vencido:   [`danger`, `Tu abono venció el ${fechaCorta(e.vence)}. Para reservar de nuevo hay que renovarlo.`],
+    sinClases: [`danger`, `Usaste las ${e.total} clases de tu abono. Para seguir entrenando, hay que renovarlo.`],
+    porVencer: [`warn`,   `Tu abono ${fraseVence(e)}. Para seguir entrenando, renová.`],
+    ultimas:   [`warn`,   `${q===1 ? 'Te queda 1 clase' : `Te quedan ${q} clases`} de tu abono. Andá pensando en renovar.`],
+    sobran:    [`warn`,   `Te quedan ${q} clases y tu abono ${e.D===0 ? 'vence hoy' : e.D===1 ? 'vence mañana' : `vence en ${e.D} días`}. Reservá para no perderlas.`],
+  };
+  return e.avisos.slice(0,2).map(a=>({ nivel:texto[a][0], texto:texto[a][1] }));
+}
+function pideRenovacion(e){ return !!e && e.tipo==='abono' && e.avisos.some(a=> a==='vencido' || a==='sinClases' || a==='porVencer'); }
+
+function mensajeRenovarAlumno(nombre, dni){ return `¡Hola! Soy ${nombre} (DNI ${dni}). Quiero renovar mi abono en ${CONFIG.nombreEspacio}.`; }
+function mensajeAbonoClases(perfil, e){
+  if(!e || e.tipo!=='abono' || e.D<0 || !(e.quedan>0)) return null;
+  return `¡Hola ${nombreSaludo(perfil.nombre, perfil.dni)}! Te escribimos de ${CONFIG.nombreEspacio} 💪. Tu abono ${fraseVence(e)} y te ${e.quedan===1 ? 'queda 1 clase' : `quedan ${e.quedan} clases`} por usar${e.R>0 ? ` (ya tenés ${e.R} reservada${e.R===1?'':'s'})` : ''}. ¡Reservá tus turnos para no perderlas! Entrá a ${CONFIG.urlSitio} y poné tu DNI.`;
+}
+function mensajeAbonoPago(perfil, e){
+  const hola = `¡Hola ${nombreSaludo(perfil.nombre, perfil.dni)}! Te escribimos de ${CONFIG.nombreEspacio} 💪. `;
+  if(e.D<0) return hola + `Tu abono venció el ${fechaCorta(e.vence)}. Para seguir entrenando hay que renovarlo: escribinos y lo coordinamos.`;
+  if(e.quedan===0) return hola + `Ya usaste las ${e.total} clases de tu abono (vence el ${fechaCorta(e.vence)}). Para seguir entrenando hay que renovarlo: escribinos y lo coordinamos.`;
+  return hola + `Tu abono ${fraseVence(e)}. Para seguir entrenando sin cortes, avisanos cuando lo renueves.`;
+}
+
+const ABONO_RANGO = { vencido:0, sinClases:1, porVencer:2, ultimas:3, sobran:4, ok:5 };
+function ordenAbono(e){
+  if(e.tipo==='sinFecha') return 6000;
+  if(e.tipo==='sinPlan') return 7000;
+  return ABONO_RANGO[e.estado]*1000 + Math.max(-400, Math.min(400, e.D)) + 400;
+}
+function grupoAbono(e){
+  if(e.tipo!=='abono') return 'sinAbono';
+  if(e.estado==='vencido' || e.estado==='sinClases') return 'renovar';
+  if(e.estado==='ok') return 'ok';
+  return 'avisar';
+}
+/* ABONOS:END */
+
 function calcularStats(){
   const hoy = new Date();
   const inicioSem = fechaKey(inicioSemana(hoy));
