@@ -314,6 +314,23 @@
   .aviso-texto{ margin:0 0 10px; font-size:13.5px; line-height:1.45; }
   .aviso-acciones{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   .aviso-acciones .mini-btn svg{ width:14px; height:14px; vertical-align:-2px; margin-right:4px; }
+  .aviso-aprobacion{ margin:0 0 12px; background:var(--ok-soft); border-color:rgba(74,222,155,0.32); }
+  .aviso-aprobacion .aviso-titulo{ color:var(--ok); }
+  .aviso-solicitudes{ margin:0 0 22px; padding:14px 16px; border-radius:10px; background:var(--accent-soft); border:1px solid rgba(169,184,255,0.28); }
+  .aviso-solicitudes .aviso-titulo{ font-size:14px; color:var(--accent); }
+  .tab-badge{ display:inline-block; min-width:16px; padding:0 5px; margin-left:3px; border-radius:999px; background:var(--accent-2); color:#fff; font-size:10px; font-weight:800; line-height:16px; text-align:center; vertical-align:1px; }
+  .admin-tabs{ scrollbar-width:none; }
+  .admin-tabs::-webkit-scrollbar{ display:none; }
+  @media(max-width:420px){ .admin-tabs{ gap:2px; } .admin-tab{ padding-left:3px; padding-right:3px; font-size:12px; } }
+  .solicitud-item{ display:flex; flex-direction:column; gap:12px; }
+  .solicitud-info{ display:flex; flex-direction:column; gap:2px; min-width:0; font-size:13.5px; }
+  .solicitud-acciones{ display:flex; gap:8px; }
+  .solicitud-acciones .mini-btn{ flex:1; padding:9px 10px; font-size:12px; }
+  @media(min-width:600px){
+    .solicitud-item{ flex-direction:row; align-items:center; justify-content:space-between; }
+    .solicitud-acciones{ flex:0 0 auto; }
+    .solicitud-acciones .mini-btn{ flex:0 0 auto; padding:8px 18px; }
+  }
   .alumno-acciones{ display:flex; justify-content:flex-end; gap:8px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
   .alumno-acciones .btn-borrar-alumno:hover{ color:var(--warn); border-color:var(--warn); }
   .alumno-nombre-link{ background:none; border:none; padding:0; cursor:pointer; text-align:left; font-family:var(--font-body); }
@@ -375,6 +392,7 @@ const CONFIG = {
   descripcion: "Sesiones uno a uno con seguimiento real. Sin rutinas genéricas ni esperar turno en la máquina: reservá tu horario y entrená con foco.",
   instagram: "@motus.entrena",
   whatsapp: "5493417218266",
+  urlSitio: "https://motusentrena.vercel.app",
   direccion: "San Juan 912, Rosario",
   adminPin: "2026",
   cierreAnticipacionMinutos: 30,
@@ -467,6 +485,7 @@ let state = {
   horariosCopiados:null,
   mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'', verOcultos:false, avisoCancelacion:null,
   turnosDiaSel:null, turnosPropuestos:[], turnosCarrito:[],
+  solicitudModo:null, solicitudPerfil:null, avisoAprobacion:null,
   mostrarNuevoGrupo:false, ngNombre:'',
   adminAlumnoDni:null, adminAlumnoTab:'pagos',
   adminGrupoId:null,
@@ -549,8 +568,8 @@ async function saveWaitlist(idsABorrar){
   }
   return true;
 }
-async function savePerfiles(){
-  const rows = Object.values(perfiles).map(p=>({ dni:p.dni, nombre:p.nombre, telefono:p.telefono, apodo:p.apodo||'', fecha_nac:p.fechaNac||null, plan:p.plan||null, clases_perso_por_semana: p.clasesPersoPorSemana??null, grupo_id:p.grupoId||null, creado: p.creado!==false, actualizado:p.actualizado||Date.now() }));
+async function savePerfiles(itemsAGuardar){
+  const rows = (itemsAGuardar || Object.values(perfiles)).map(p=>({ dni:p.dni, nombre:p.nombre, telefono:p.telefono, apodo:p.apodo||'', fecha_nac:p.fechaNac||null, plan:p.plan||null, clases_perso_por_semana: p.clasesPersoPorSemana??null, grupo_id:p.grupoId||null, creado: p.creado!==false, actualizado:p.actualizado||Date.now() }));
   if(!rows.length) return true;
   const { error } = await sb.from('perfiles').upsert(rows, { onConflict:'dni' });
   if(error){ console.error('Error guardando perfiles:', error); alert('No se pudo guardar el alumno: '+error.message); return false; }
@@ -646,7 +665,7 @@ async function asegurarReservasFijas(){
   const nuevas = [];
   dnisConFijo.forEach(dni=>{
     const perfil = perfiles[dni];
-    if(!perfil) return;
+    if(!perfilAprobado(perfil)) return;
     fijos[dni].forEach(fx=>{
       fechas.filter(f=>f.dia===fx.dia).forEach(f=>{
         const slot = getSlot(fx.dia, fx.horaId);
@@ -696,6 +715,7 @@ async function borrarAlumno(dni){
   if(!r.data || r.data.length===0) return falla('alumno', { message:'la base de datos no permitió borrarlo (falta permiso de borrado en la tabla perfiles)' });
 
   delete perfiles[dni];
+  if(horariosFijosDe(dni).length) await setHorariosFijos(dni, []);
   rutinaDias = rutinaDias.filter(d=>d.dni!==dni);
   rutinaEjercicios = rutinaEjercicios.filter(e=>!idsDias.includes(e.rutinaDiaId));
   registros = registros.filter(x=>x.dni!==dni);
@@ -718,8 +738,9 @@ async function borrarGrupo(id){
     await sb.from('rutina_ejercicios').delete().in('rutina_dia_id', diasDelGrupo);
     await sb.from('rutina_dias').delete().eq('grupo_id', id);
   }
-  Object.values(perfiles).forEach(p=>{ if(p.grupoId===id) p.grupoId=null; });
-  await savePerfiles();
+  const miembros = Object.values(perfiles).filter(p=>p.grupoId===id);
+  miembros.forEach(p=>{ p.grupoId=null; });
+  if(miembros.length) await savePerfiles(miembros);
   grupos = grupos.filter(g=>g.id!==id);
   rutinaDias = rutinaDias.filter(d=>d.grupoId!==id);
   rutinaEjercicios = rutinaEjercicios.filter(e=> !diasDelGrupo.includes(e.rutinaDiaId));
@@ -790,13 +811,16 @@ function ofrecidaDe(fecha, horaId){ return waitlist.filter(w=>w.fecha===fecha &&
 function getSlot(dia, id){ if(!dia || !schedule[dia]) return null; return schedule[dia].find(s=>s.id===id) || null; }
 
 function normalizarDni(raw){ return (raw||'').replace(/\D/g,''); }
+// Deja el teléfono argentino como lo pide wa.me: 549 + código de área + número, sin el 0 inicial ni el 15.
 function toWaNumber(raw){
   let d = (raw||'').replace(/\D/g,'');
   if(d.startsWith('00')) d = d.slice(2);
+  if(d.startsWith('549')) d = d.slice(3);
+  else if(d.startsWith('54')) d = d.slice(2);
   if(d.startsWith('0')) d = d.slice(1);
-  d = d.replace(/^(\d{2,4})15(\d+)$/, '$1$2');
-  if(d.startsWith('549')) return d;
-  if(d.startsWith('54')) return '549'+d.slice(2);
+  // El 15 del celular va entre el código de área y el número (12 dígitos en vez de 10). Se saca solo con esa
+  // longitud: un "15" que aparece de casualidad en un número de 10 dígitos (ej. 341 5…) no se debe tocar.
+  if(d.length===12){ const i = [2,3,4].find(i=> d.slice(i,i+2)==='15'); if(i!==undefined) d = d.slice(0,i)+d.slice(i+2); }
   return '549'+d;
 }
 function waLink(telefono, mensaje){ return `https://wa.me/${toWaNumber(telefono)}?text=${encodeURIComponent(mensaje)}`; }
@@ -817,17 +841,48 @@ function formatearWhatsApp(raw){
   return d ? '+'+d : '';
 }
 
-async function upsertPerfil(nombre, telefono, dni){
+// --- Registro de alumnos nuevos: la persona pide el registro y el profe lo aprueba ---
+// Un perfil con creado===false es una solicitud pendiente: todavía no puede sacar turno.
+function perfilAprobado(p){ return !!p && p.creado!==false; }
+function perfilesAprobados(){ return Object.values(perfiles).filter(perfilAprobado); }
+function solicitudesPendientes(){ return Object.values(perfiles).filter(p=>p.creado===false).sort((a,b)=>(a.actualizado||0)-(b.actualizado||0)); }
+
+const MSG_SIN_APROBAR = 'Tu registro no está aprobado, así que por ahora no podés sacar turno. Escribinos por WhatsApp y lo resolvemos.';
+function mensajeSolicitudRegistro(nombre, dni){ return `¡Hola! Soy ${nombre} (DNI ${dni}). Pedí mi registro en ${CONFIG.nombreEspacio} desde la web. ¿Me lo pueden aprobar para empezar a sacar turnos?`; }
+function mensajeAprobacion(nombre){ return `¡Hola ${nombrePreferido(nombre,'')}! Te escribimos de ${CONFIG.nombreEspacio} 💪. Ya aprobamos tu registro: entrá a ${CONFIG.urlSitio}, poné tu DNI y reservá tu primera clase. ¡Te esperamos!`; }
+
+// Devuelve el perfil creado, 'existe' si ese DNI apareció justo en el medio, o null si falló.
+async function solicitarRegistro(nombre, telefono, dni){
   const key = normalizarDni(dni);
-  const existente = perfiles[key] || {};
-  perfiles[key] = {
-    nombre: nombre.trim(), telefono: telefono.trim(), dni: key,
-    apodo: existente.apodo || '', fechaNac: existente.fechaNac || '',
-    plan: existente.plan || null, clasesPersoPorSemana: existente.clasesPersoPorSemana || null,
-    creado:true, actualizado: Date.now(),
-  };
-  await savePerfiles();
-  return perfiles[key];
+  const perfil = { nombre:nombre.trim(), telefono:telefono.trim(), dni:key, apodo:'', fechaNac:'', plan:null, clasesPersoPorSemana:null, grupoId:null, creado:false, actualizado:Date.now() };
+  // insert (no upsert): si ese DNI ya existe falla en vez de pisar los datos de un alumno
+  const { error } = await sb.from('perfiles').insert({ dni:perfil.dni, nombre:perfil.nombre, telefono:perfil.telefono, apodo:'', fecha_nac:null, plan:null, clases_perso_por_semana:null, grupo_id:null, creado:false, actualizado:perfil.actualizado });
+  if(error){
+    console.error('Error enviando la solicitud:', error);
+    if(error.code==='23505'){ await loadData(); return 'existe'; }
+    alert('No se pudo enviar la solicitud: '+error.message);
+    return null;
+  }
+  perfiles[key] = perfil;
+  return perfil;
+}
+// Solo toca filas que sigan pendientes: si otro profe ya la resolvió, no hace nada y avisa.
+async function aprobarRegistro(dni){
+  const { data, error } = await sb.from('perfiles').update({ creado:true, actualizado:Date.now() }).eq('dni', dni).eq('creado', false).select();
+  if(error){ console.error('Error aprobando el registro:', error); alert('No se pudo aprobar la solicitud: '+error.message); return false; }
+  if(!data || data.length===0){ alert('Esa solicitud ya no está pendiente (puede que otro profe ya la haya resuelto).'); await loadData(); return false; }
+  if(perfiles[dni]){ perfiles[dni].creado = true; perfiles[dni].actualizado = data[0].actualizado; }
+  // Una persona nueva no hereda horarios fijos viejos que hayan quedado de un alumno anterior con el mismo DNI.
+  if(horariosFijosDe(dni).length) await setHorariosFijos(dni, []);
+  return true;
+}
+// El filtro creado=false evita que por error se borre a un alumno ya aprobado.
+async function rechazarRegistro(dni){
+  const { data, error } = await sb.from('perfiles').delete().eq('dni', dni).eq('creado', false).select();
+  if(error){ console.error('Error rechazando el registro:', error); alert('No se pudo rechazar la solicitud: '+error.message); return false; }
+  if(!data || data.length===0){ alert('Esa solicitud ya no está pendiente (puede que otro profe ya la haya resuelto).'); await loadData(); return false; }
+  delete perfiles[dni];
+  return true;
 }
 
 // --- Planes y límite semanal ---
@@ -905,7 +960,7 @@ function proximaFechaCumple(mes, dia, anio){
 function cumpleaniosProximos(){
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const out = [];
-  Object.values(perfiles).forEach(p=>{
+  perfilesAprobados().forEach(p=>{
     if(!p.fechaNac) return;
     const [, m, d] = p.fechaNac.split('-').map(Number);
     let prox = proximaFechaCumple(m, d, hoy.getFullYear());
@@ -940,6 +995,7 @@ function render(){
   let html = '';
   if(v==='home') html = renderHome();
   else if(v==='identificar') html = renderIdentificar();
+  else if(v==='solicitud') html = renderSolicitud();
   else if(v==='dia') html = renderDia();
   else if(v==='form') html = renderForm();
   else if(v==='confirmacion') html = renderConfirmacion();
@@ -1037,15 +1093,33 @@ function renderIdentificar(){
     <div class="pad">
       <p class="section-eyebrow">Antes de reservar</p>
       <h2 class="section-title">¿Quién entrena?</h2>
-      <div class="form-note">${pedirDatos ? 'No te encontramos registrado — completá estos datos una sola vez.' : 'Ingresá tu DNI. Si ya entrenás con nosotros, con eso alcanza.'}</div>
+      <div class="form-note">${pedirDatos ? 'No te encontramos como alumno. Completá tus datos para pedir tu registro: el profe lo revisa y te avisamos por WhatsApp cuando puedas sacar turno.' : 'Ingresá tu DNI. Si ya entrenás con nosotros, con eso alcanza.'}</div>
       <div class="form-alert" id="idAlert"></div>
       <div class="field"><label for="inpIdDni">DNI</label><input id="inpIdDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.idDni)}" ${pedirDatos?'readonly':''}></div>
       ${pedirDatos ? `
         <div class="field"><label for="inpIdNombre">Nombre y apellido</label><input id="inpIdNombre" type="text" placeholder="Ej: Juana Pérez" value="${escapeHtml(state.idNombre)}"></div>
         <div class="field"><label for="inpIdTel">WhatsApp</label><input id="inpIdTel" type="tel" placeholder="Ej: 341 555 1234" value="${escapeHtml(state.idTel)}"></div>
-        <button class="cta-primary" id="btnContinuarId">Registrarme y continuar</button>
+        <button class="cta-primary" id="btnContinuarId">Enviar solicitud de registro</button>
         <button class="cta-secondary" id="btnVolverDni">Volver a poner mi DNI</button>
       ` : `<button class="cta-primary" id="btnContinuarId">Continuar</button>`}
+    </div>
+  `;
+}
+
+function renderSolicitud(){
+  const p = state.solicitudPerfil || {};
+  const enviada = state.solicitudModo==='enviada';
+  const waHref = CONFIG.whatsapp ? waLink(CONFIG.whatsapp, mensajeSolicitudRegistro(p.nombre||'', p.dni||'')) : '';
+  return `
+    <div class="confirm-wrap">
+      <div class="check-circle wait"><svg viewBox="0 0 24 24">${icon('check')}</svg></div>
+      <h2 class="confirm-title">${enviada ? '¡Solicitud enviada!' : 'Tu solicitud está pendiente'}</h2>
+      <p class="confirm-text">${enviada
+        ? 'Ahora avisanos por WhatsApp para que el profe la apruebe más rápido. Cuando te aprueben vas a poder sacar turno con tu DNI.'
+        : 'Todavía no te aprobaron el registro. Escribinos por WhatsApp para avisar que estás esperando: cuando te aprueben vas a poder sacar turno con tu DNI.'}</p>
+      <div class="confirm-list"><div><span>${escapeHtml(p.nombre||'')}</span><span><b>DNI ${escapeHtml(p.dni||'')}</b></span></div></div>
+      ${waHref ? `<a class="wa-btn" href="${waHref}" target="_blank" rel="noopener">${icon('wa')} Avisar por WhatsApp</a>` : ''}
+      <button class="cta-secondary" id="btnVolverInicioSolicitud">Volver al inicio</button>
     </div>
   `;
 }
@@ -1217,7 +1291,7 @@ function renderTestimonio(){
       <div class="form-alert" id="testiAlert"></div>
       <div class="field"><label for="inpTestiDni">Tu DNI</label><input id="inpTestiDni" type="text" inputmode="numeric" placeholder="Ej: 38452109" value="${escapeHtml(state.testiDni)}" ${perfil?'readonly':''}></div>
       ${perfil===undefined ? `<button class="cta-secondary" id="btnBuscarTesti" style="margin-top:0;">Continuar</button>` : ''}
-      ${perfil===null ? `<p class="empty-note">No encontramos ese DNI registrado. Hablá con tu profesor para que te registre y puedas dejar tu comentario.</p>` : ''}
+      ${perfil===null ? `<p class="empty-note">No encontramos ese DNI como alumno registrado. Si todavía no sos alumno, pedí tu registro desde «Reservar entrenamiento»: cuando el profe lo apruebe vas a poder dejar tu comentario.</p>` : ''}
       ${perfil ? `
         <div class="field" style="margin-top:16px;"><label for="inpTestiTexto">Tu comentario</label><textarea id="inpTestiTexto" rows="4" placeholder="Contanos tu experiencia..." style="width:100%; background:var(--bg-elev); border:1px solid var(--border-strong); border-radius:11px; padding:14px 15px; font-family:var(--font-body); font-size:15px; color:var(--text); resize:vertical;">${escapeHtml(state.testiTexto)}</textarea></div>
         <button class="cta-primary" id="btnEnviarTesti">Publicar comentario</button>
@@ -1277,10 +1351,16 @@ function renderMiSemana(){
     const pasados = mias.filter(r=>r.fecha<hoy);
     const futuros = mias.filter(r=>r.fecha>=hoy);
 
+    // Con la solicitud de registro todavía pendiente no hay plan, ni reservas nuevas, ni comprobantes ni progreso.
+    const pendiente = !!perfil && !perfilAprobado(perfil);
     let plan = '';
     let saludo = '';
     let btnReservarOtra = '';
-    if(perfil){
+    if(pendiente){
+      saludo = `<p class="section-eyebrow" style="margin-bottom:14px;">¡Hola, ${escapeHtml(nombreSaludo(perfil.nombre, perfil.dni))}!</p>`;
+      plan = `<div class="plan-banner blocked"><p class="plan-banner-plan">Registro pendiente</p><p class="plan-banner-msg">El profe todavía no aprobó tu solicitud. Cuando lo haga vas a poder sacar turno con tu DNI.</p></div>`
+        + (CONFIG.whatsapp ? `<a class="wa-btn" href="${waLink(CONFIG.whatsapp, mensajeSolicitudRegistro(perfil.nombre, perfil.dni))}" target="_blank" rel="noopener" style="margin-top:14px;">${icon('wa')} Avisar por WhatsApp</a>` : '');
+    }else if(perfil){
       saludo = `<p class="section-eyebrow" style="margin-bottom:14px;">¡Hola, ${escapeHtml(nombreSaludo(perfil.nombre, perfil.dni))}!</p>`;
       const estado = mensajePlanEstado(perfil, hoyKey());
       plan = `<div class="plan-banner ${estado.bloqueado?'blocked':''}"><p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p><p class="plan-banner-msg">${estado.texto}</p></div>`;
@@ -1288,7 +1368,7 @@ function renderMiSemana(){
     }
 
     if(mias.length===0){
-      contenido = saludo + plan + btnReservarOtra + `<p class="empty-note" style="margin-top:16px;">No encontramos reservas con ese DNI. Si es tu primera vez, ¡reservá tu primer entrenamiento!</p>`;
+      contenido = saludo + plan + btnReservarOtra + (pendiente ? '' : `<p class="empty-note" style="margin-top:16px;">No encontramos reservas con ese DNI. Si todavía no sos alumno, pedí tu registro desde «Reservar entrenamiento» y el profe te lo aprueba.</p>`);
     }else{
       contenido = saludo + plan + btnReservarOtra + `
         ${futuros.length>0 ? `
@@ -1320,7 +1400,7 @@ function renderMiSemana(){
       `;
     }
 
-    if(perfil){
+    if(perfil && !pendiente){
       contenido += `
         <div class="week-group">
           <h3 class="week-group-title">Comprobantes de pago</h3>
@@ -1362,7 +1442,8 @@ function renderAdminPin(){
 
 function renderAdmin(){
   const tabs = [['dashboard','Hoy'], ['agenda','Agenda'], ['horarios','Horarios'], ['alumnos','Alumnos'], ['portada','Portada']];
-  const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminTab===id?'active':''}" data-tab="${id}">${label}</button>`).join('')}</div>`;
+  const nPendientes = solicitudesPendientes().length;
+  const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminTab===id?'active':''}" data-tab="${id}">${label}${id==='alumnos' && nPendientes>0 ? ` <span class="tab-badge" title="${nPendientes} solicitud${nPendientes===1?'':'es'} de registro">${nPendientes}</span>` : ''}</button>`).join('')}</div>`;
   let body = '';
   if(state.adminTab==='dashboard') body = renderAdminDashboard();
   else if(state.adminTab==='agenda') body = renderAdminAgenda();
@@ -1389,8 +1470,15 @@ function renderAdminDashboard(){
   const alumnosHoy = reservas.filter(r=>r.fecha===hoy && r.estado!=='cancelada').length;
   const cumples = cumpleaniosProximos();
   const huecos = huecosLibres(6);
+  const nPendientes = solicitudesPendientes().length;
 
   return `
+    ${nPendientes>0 ? `
+      <div class="aviso-solicitudes">
+        <p class="aviso-titulo">${nPendientes===1 ? '1 persona pidió registrarse' : nPendientes+' personas pidieron registrarse'}</p>
+        <p class="aviso-texto">Hasta que las apruebes no pueden sacar turno.</p>
+        <div class="aviso-acciones"><button class="mini-btn ok" id="btnIrSolicitudes">Revisar solicitudes</button></div>
+      </div>` : ''}
     <div class="dash-block">
       <h3 class="dash-block-title">Hoy tenés ${alumnosHoy} alumno${alumnosHoy===1?'':'s'}</h3>
       ${slotsHoy.length===0 ? `<p class="empty-note">No hay horarios cargados para hoy.</p>` : slotsHoy.map(s=>{
@@ -1547,11 +1635,58 @@ function renderAdminHorarios(){
   }).join('');
 }
 
+function haceCuanto(ts){
+  if(!ts) return '';
+  const min = Math.max(0, Math.round((Date.now()-ts)/60000));
+  if(min<2) return 'recién';
+  if(min<60) return `hace ${min} min`;
+  const h = Math.round(min/60);
+  if(h<24) return `hace ${h} h`;
+  const d = Math.round(h/24);
+  return `hace ${d} día${d===1?'':'s'}`;
+}
+
+// Personas que pidieron registrarse desde la web: el profe las aprueba (y recién ahí pueden sacar turno) o las rechaza.
+function renderSolicitudesRegistro(){
+  const pendientes = solicitudesPendientes();
+  const aviso = state.avisoAprobacion;
+  if(pendientes.length===0 && !aviso) return '';
+  return `
+    <div class="admin-day-group solicitudes-block">
+      <div class="admin-day-title-row"><h3 class="admin-day-title">Solicitudes de registro${pendientes.length>0 ? ' ('+pendientes.length+')' : ''}</h3></div>
+      ${aviso ? `
+        <div class="aviso-cancelacion aviso-aprobacion">
+          <p class="aviso-titulo">Registro aprobado</p>
+          <p class="aviso-texto"><b>${escapeHtml(aviso.nombre)}</b> ya puede sacar turno. ¿Querés avisarle por WhatsApp e invitarlo a reservar?</p>
+          <div class="aviso-acciones">
+            <a class="mini-btn ok btn-avisar-aprobacion" href="${waLink(aviso.tel, mensajeAprobacion(aviso.nombre))}" target="_blank" rel="noopener">${icon('wa')} Avisar por WhatsApp</a>
+            <button class="tiny-btn btn-cerrar-aviso-aprobacion">No, gracias</button>
+          </div>
+        </div>` : ''}
+      ${pendientes.length>0 ? `<p class="empty-note" style="margin:0 0 10px;">Pidieron registrarse desde la web. Hasta que las apruebes no pueden sacar turno.</p>` : ''}
+      ${pendientes.map(s=>`
+        <div class="admin-slot solicitud-item">
+          <div class="solicitud-info">
+            <span class="admin-alumno-name">${escapeHtml(s.nombre)}</span>
+            <span class="admin-alumno-tel">DNI ${escapeHtml(s.dni)} · ${escapeHtml(s.telefono)}</span>
+            ${s.actualizado ? `<span class="admin-alumno-tel">Pidió el registro ${haceCuanto(s.actualizado)}</span>` : ''}
+          </div>
+          <div class="solicitud-acciones">
+            <button class="mini-btn ok btn-aprobar-registro" data-dni="${escapeHtml(s.dni)}">Aprobar</button>
+            <button class="mini-btn warn btn-rechazar-registro" data-dni="${escapeHtml(s.dni)}">Rechazar</button>
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
 function renderAdminAlumnos(){
   const filtro = state.filtroAlumno.trim().toLowerCase();
-  const totalOcultos = Object.values(perfiles).filter(p=>alumnoOculto(p.dni)).length;
+  const aprobados = perfilesAprobados();
+  const bloqueSolicitudes = renderSolicitudesRegistro();
+  const totalOcultos = aprobados.filter(p=>alumnoOculto(p.dni)).length;
   const verOcultos = state.verOcultos && totalOcultos>0;
-  let lista = Object.values(perfiles).filter(p=> alumnoOculto(p.dni)===verOcultos);
+  let lista = aprobados.filter(p=> alumnoOculto(p.dni)===verOcultos);
   if(filtro) lista = lista.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.apodo||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro) || (a.telefono||'').includes(filtro));
 
   const searchBox = `<div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar por nombre, apodo, DNI o teléfono" value="${escapeHtml(state.filtroAlumno)}"></div>`
@@ -1580,7 +1715,7 @@ function renderAdminAlumnos(){
     </div>
   ` : `<button class="add-slot-btn" id="btnMostrarNuevoAlumno" style="margin-bottom:14px;">+ Registrar alumno nuevo</button>`;
 
-  if(Object.values(perfiles).length===0) return `${searchBox}${bloqueNuevo}<div class="empty-state">Todavía no hay alumnos registrados. Registralos manualmente o se crean solos cuando reservan.</div>`;
+  if(aprobados.length===0) return `${bloqueSolicitudes}${searchBox}${bloqueNuevo}<div class="empty-state">Todavía no hay alumnos registrados. Registralos manualmente o aprobá las solicitudes que lleguen desde la web.</div>`;
 
   const bloqueGrupoNuevo = state.mostrarNuevoGrupo ? `
     <div class="admin-slot">
@@ -1600,15 +1735,16 @@ function renderAdminAlumnos(){
       </div>
       ${bloqueGrupoNuevo}
       ${grupos.length===0 ? `<p class="admin-alumno-libre">Todavía no hay grupos creados.</p>` : grupos.map(g=>{
-        const miembros = Object.values(perfiles).filter(p=>p.grupoId===g.id).length;
+        const miembros = aprobados.filter(p=>p.grupoId===g.id).length;
         return `<div class="grupo-row"><span>${escapeHtml(g.nombre)} <span style="color:var(--muted); font-size:12px;">· ${miembros} alumno${miembros===1?'':'s'}</span></span><button class="tiny-btn btn-ver-grupo" data-id="${g.id}">Ver / editar</button></div>`;
       }).join('')}
     </div>
   `;
 
-  if(lista.length===0) return `${searchBox}${bloqueNuevo}${bloqueGrupos}<div class="empty-state">No encontramos alumnos con ese criterio.</div>`;
+  if(lista.length===0) return `${bloqueSolicitudes}${searchBox}${bloqueNuevo}${bloqueGrupos}<div class="empty-state">No encontramos alumnos con ese criterio.</div>`;
 
   return `
+    ${bloqueSolicitudes}
     ${searchBox}
     ${bloqueNuevo}
     ${bloqueGrupos}
@@ -1884,7 +2020,7 @@ function renderAdminGrupoFicha(){
   const g = grupos.find(x=>x.id===state.adminGrupoId);
   if(!g) return `<div class="empty-state">Grupo no encontrado.</div>`;
   const filtro = state.filtroAlumno.trim().toLowerCase();
-  let miembrosPosibles = Object.values(perfiles).filter(a=> !alumnoOculto(a.dni) || a.grupoId===g.id);
+  let miembrosPosibles = perfilesAprobados().filter(a=> !alumnoOculto(a.dni) || a.grupoId===g.id);
   if(filtro) miembrosPosibles = miembrosPosibles.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro));
 
   return `
@@ -1989,11 +2125,11 @@ function renderAdminPortada(){
   `;
 }
 
-function protegido(btn, fn){
+function protegido(btn, fn, textoOcupado='Guardando…'){
   return async (...args)=>{
     if(btn.dataset.ocupado==='1') return;
     const textoOriginal = btn.textContent;
-    btn.dataset.ocupado='1'; btn.disabled=true; btn.textContent='Guardando…';
+    btn.dataset.ocupado='1'; btn.disabled=true; btn.textContent=textoOcupado;
     try{ await fn(...args); }
     finally{ if(btn.isConnected){ btn.dataset.ocupado='0'; btn.disabled=false; btn.textContent=textoOriginal; } }
   };
@@ -2037,7 +2173,20 @@ function bindEvents(){
     const btnVolver = $('#btnVolverDni');
     if(btnVolver) btnVolver.onclick = ()=>{ state.idNecesitaDatos=false; state.idDni=''; state.idNombre=''; state.idTel=''; render(); };
 
-    $('#btnContinuarId').onclick = async ()=>{
+    // Solo un alumno aprobado pasa a elegir turno. Un DNI con solicitud pendiente ve el estado de su pedido,
+    // y uno desconocido tiene que pedir el registro (el profe lo aprueba antes de que pueda reservar).
+    const irSegunEstado = p=>{
+      if(perfilAprobado(p)){
+        state.identidad = { dni: p.dni, nombre: p.nombre, telefono: p.telefono };
+        state.view='dia';
+      }else{
+        state.solicitudModo = 'pendiente';
+        state.solicitudPerfil = { nombre:p.nombre, dni:p.dni, telefono:p.telefono };
+        state.view='solicitud';
+      }
+      render();
+    };
+    $('#btnContinuarId').onclick = protegido($('#btnContinuarId'), async ()=>{
       const alertBox = $('#idAlert');
       const dni = normalizarDni(state.idDni);
       if(dni.length<6){ alertBox.textContent='Ingresá un DNI válido (mínimo 6 dígitos).'; alertBox.style.display='block'; return; }
@@ -2045,12 +2194,8 @@ function bindEvents(){
       if(!state.idNecesitaDatos){
         await loadData();
         const p = perfiles[dni];
-        if(p){
-          state.identidad = { dni: p.dni, nombre: p.nombre, telefono: p.telefono };
-          state.view='dia'; render();
-        }else{
-          state.idNecesitaDatos = true; render();
-        }
+        if(p) irSegunEstado(p);
+        else{ state.idNecesitaDatos = true; render(); }
         return;
       }
 
@@ -2058,10 +2203,18 @@ function bindEvents(){
       const tel = state.idTel.trim();
       if(!nombre || !tel){ alertBox.textContent='Completá tu nombre y WhatsApp.'; alertBox.style.display='block'; return; }
       await loadData();
-      const perfil = await upsertPerfil(nombre, tel, dni);
-      state.identidad = { dni: perfil.dni, nombre: perfil.nombre, telefono: perfil.telefono };
-      state.view='dia'; render();
-    };
+      if(perfiles[dni]){ irSegunEstado(perfiles[dni]); return; }
+      const perfil = await solicitarRegistro(nombre, tel, dni);
+      if(!perfil) return;
+      if(perfil==='existe'){ if(perfiles[dni]) irSegunEstado(perfiles[dni]); return; }
+      state.solicitudModo = 'enviada';
+      state.solicitudPerfil = { nombre:perfil.nombre, dni:perfil.dni, telefono:perfil.telefono };
+      state.view='solicitud'; render();
+    }, 'Un momento…');
+  }
+
+  if(state.view==='solicitud'){
+    $('#btnVolverInicioSolicitud').onclick = ()=>{ state.view='home'; state.solicitudModo=null; state.solicitudPerfil=null; state.idNecesitaDatos=false; state.idDni=''; state.idNombre=''; state.idTel=''; render(); };
   }
 
   if(state.view==='dia'){
@@ -2107,6 +2260,7 @@ function bindEvents(){
 
         await loadData();
         const perfil = perfiles[state.identidad.dni];
+        if(!perfilAprobado(perfil)){ state.limiteMsg = MSG_SIN_APROBAR; render(); return; }
         const yaEnCarritoMismaSemana = state.carrito.filter(c=>{
           const inicioA = fechaKey(inicioSemana(parseFechaKey(c.fecha)));
           const inicioB = fechaKey(inicioSemana(parseFechaKey(state.fechaSel)));
@@ -2141,6 +2295,8 @@ function bindEvents(){
       const alertBox = $('#formAlert');
       await loadData();
       const { dni, nombre, telefono } = state.identidad;
+      // Última barrera: solo un alumno aprobado puede reservar o anotarse en la lista de espera.
+      if(!perfilAprobado(perfiles[dni])){ alertBox.textContent = MSG_SIN_APROBAR; alertBox.style.display='block'; return; }
 
       if(state.modoEspera){
         const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
@@ -2220,7 +2376,7 @@ function bindEvents(){
       const alertBox = $('#testiAlert');
       if(dni.length<6){ alertBox.textContent='Ingresá un DNI válido.'; alertBox.style.display='block'; return; }
       await loadData();
-      state.testiPerfil = perfiles[dni] || null;
+      state.testiPerfil = perfilAprobado(perfiles[dni]) ? perfiles[dni] : null;
       render();
     };
     const textoEl = $('#inpTestiTexto'); if(textoEl) textoEl.oninput = e=>{ state.testiTexto = e.target.value; };
@@ -2267,7 +2423,7 @@ function bindEvents(){
     if(btnReservarOtra) btnReservarOtra.onclick = ()=>{
       const dni = normalizarDni(state.buscarDni);
       const perfil = perfiles[dni];
-      if(!perfil) return;
+      if(!perfilAprobado(perfil)) return;
       state.identidad = { dni: perfil.dni, nombre: perfil.nombre, telefono: perfil.telefono };
       state.fechaSel=null; state.slotSel=null; state.modoEspera=false; state.modoModificar=null;
       state.carrito=[]; state.amigos=[]; state.limiteMsg='';
@@ -2294,7 +2450,9 @@ function bindEvents(){
   }
 
   if(state.view==='admin'){
-    $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; state.avisoCancelacion=null; await loadData(); render(); });
+    $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; state.avisoCancelacion=null; state.avisoAprobacion=null; await loadData(); render(); });
+    const btnIrSolicitudes = $('#btnIrSolicitudes');
+    if(btnIrSolicitudes) btnIrSolicitudes.onclick = async ()=>{ state.adminTab='alumnos'; state.verOcultos=false; state.filtroAlumno=''; await loadData(); render(); };
 
     if(state.adminTab==='agenda'){
       $$('.btn-asistencia').forEach(btn=>{
@@ -2449,17 +2607,40 @@ function bindEvents(){
         const tel = state.naTel.trim();
         if(dni.length<6 || !nombre || !tel){ alertBox.textContent='Completá nombre, WhatsApp y DNI (mínimo 6 dígitos).'; alertBox.style.display='block'; return; }
         await loadData();
-        if(perfiles[dni]){ alertBox.textContent=`Ya existe un alumno con ese DNI: ${perfiles[dni].nombre}. Buscalo arriba para editarlo.`; alertBox.style.display='block'; return; }
-        perfiles[dni] = {
+        if(perfiles[dni]){
+          alertBox.textContent = perfilAprobado(perfiles[dni])
+            ? `Ya existe un alumno con ese DNI: ${perfiles[dni].nombre}. Buscalo arriba para editarlo.`
+            : `Ese DNI ya pidió registrarse (${perfiles[dni].nombre}). Aprobalo desde "Solicitudes de registro", más arriba.`;
+          alertBox.style.display='block'; return;
+        }
+        const nuevo = {
           nombre, telefono: tel, dni, apodo:'', fechaNac:'',
           plan: state.naPlan || null,
           clasesPersoPorSemana: state.naPlan==='perso' ? (state.naPerso==='' ? null : Math.max(0, parseInt(state.naPerso)||0)) : null,
           creado:true, actualizado:Date.now(),
         };
-        await savePerfiles();
+        perfiles[dni] = nuevo;
+        if(!(await savePerfiles([nuevo]))){ delete perfiles[dni]; return; }
         state.mostrarNuevoAlumno=false;
         render();
       };
+
+      $$('.btn-aprobar-registro').forEach(btn=>{
+        btn.onclick = protegido(btn, async ()=>{
+          const p = perfiles[btn.dataset.dni]; if(!p) return;
+          if(await aprobarRegistro(p.dni)) state.avisoAprobacion = { dni:p.dni, nombre:p.nombre, tel:p.telefono };
+          render();
+        }, 'Aprobando…');
+      });
+      $$('.btn-rechazar-registro').forEach(btn=>{
+        btn.onclick = ()=>{
+          const p = perfiles[btn.dataset.dni]; if(!p) return;
+          if(!confirm(`¿Estás seguro de rechazar la solicitud de ${p.nombre} (DNI ${p.dni})?\n\nSe elimina el pedido y esa persona no va a poder sacar turno. Si más adelante quiere entrar, tiene que volver a pedir el registro.`)) return;
+          protegido(btn, async ()=>{ await rechazarRegistro(p.dni); render(); }, 'Rechazando…')();
+        };
+      });
+      $$('.btn-avisar-aprobacion').forEach(a=>{ a.onclick = ()=>{ setTimeout(()=>{ state.avisoAprobacion=null; render(); }, 150); }; });
+      $$('.btn-cerrar-aviso-aprobacion').forEach(b=>{ b.onclick = ()=>{ state.avisoAprobacion=null; render(); }; });
 
       const buscar = $('#inpBuscarAlumno');
       if(buscar) buscar.oninput = e=>{ state.filtroAlumno = e.target.value; render(); };
@@ -2471,22 +2652,25 @@ function bindEvents(){
         if(seleccionados.length===0){ alert('Seleccioná al menos un alumno.'); return; }
         seleccionados.forEach((c,i)=>{ setTimeout(()=>{ window.open(waLink(c.value, mensajeRecordatorio(c.dataset.nombre, c.dataset.dni)), '_blank'); }, i*350); });
       };
-      $$('.inp-apodo').forEach(inp=>{ inp.onchange = async ()=>{ if(perfiles[inp.dataset.dni]){ perfiles[inp.dataset.dni].apodo = inp.value.trim(); await savePerfiles(); render(); } }; });
-      $$('.inp-fecha-nac').forEach(inp=>{ inp.onchange = async ()=>{ if(perfiles[inp.dataset.dni]){ perfiles[inp.dataset.dni].fechaNac = inp.value; await savePerfiles(); render(); } }; });
+      // Se guarda solo el alumno editado: así no se pisa a otros (ni se des-aprueba una solicitud) con datos viejos de esta pantalla.
+      $$('.inp-apodo').forEach(inp=>{ inp.onchange = async ()=>{ const p = perfiles[inp.dataset.dni]; if(p){ p.apodo = inp.value.trim(); await savePerfiles([p]); render(); } }; });
+      $$('.inp-fecha-nac').forEach(inp=>{ inp.onchange = async ()=>{ const p = perfiles[inp.dataset.dni]; if(p){ p.fechaNac = inp.value; await savePerfiles([p]); render(); } }; });
       $$('.sel-plan').forEach(sel=>{
         sel.onchange = async ()=>{
-          if(perfiles[sel.dataset.dni]){
-            perfiles[sel.dataset.dni].plan = sel.value || null;
-            await savePerfiles();
+          const p = perfiles[sel.dataset.dni];
+          if(p){
+            p.plan = sel.value || null;
+            await savePerfiles([p]);
             render();
           }
         };
       });
       $$('.inp-perso').forEach(inp=>{
         inp.onchange = async ()=>{
-          if(perfiles[inp.dataset.dni]){
-            perfiles[inp.dataset.dni].clasesPersoPorSemana = inp.value==='' ? null : Math.max(0, parseInt(inp.value)||0);
-            await savePerfiles();
+          const p = perfiles[inp.dataset.dni];
+          if(p){
+            p.clasesPersoPorSemana = inp.value==='' ? null : Math.max(0, parseInt(inp.value)||0);
+            await savePerfiles([p]);
             render();
           }
         };
@@ -2660,7 +2844,7 @@ function bindEvents(){
         const p = perfiles[chk.dataset.dni];
         if(!p) return;
         p.grupoId = chk.checked ? state.adminGrupoId : null;
-        await savePerfiles();
+        await savePerfiles([p]);
         render();
       };
     });
