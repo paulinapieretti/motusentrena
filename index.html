@@ -1349,6 +1349,20 @@ function renderSolicitud(){
   `;
 }
 
+// Buscador: se puede escribir todo lo que se quiera y recién busca con Enter o con el botón Buscar.
+function buscadorHtml(id, placeholder, valor){
+  return `<div class="search-box">${icon('search')}<input type="text" id="${id}" placeholder="${placeholder}" value="${escapeHtml(valor)}" enterkeyhint="search" autocomplete="off">
+    <button type="button" class="tiny-btn btn-buscar" data-for="${id}">Buscar</button>${valor ? `<button type="button" class="tiny-btn btn-limpiar-busqueda" data-for="${id}">Limpiar</button>` : ''}</div>`;
+}
+function bindBuscador($$, id, claveEstado){
+  const inp = document.getElementById(id);
+  if(!inp) return;
+  const buscar = ()=>{ state[claveEstado] = inp.value; render(); };
+  inp.onkeydown = e=>{ if(e.key==='Enter'){ e.preventDefault(); buscar(); } };
+  $$('.btn-buscar').forEach(b=>{ if(b.dataset.for===id) b.onclick = buscar; });
+  $$('.btn-limpiar-busqueda').forEach(b=>{ if(b.dataset.for===id) b.onclick = ()=>{ state[claveEstado] = ''; render(); }; });
+}
+
 // --- Abonos: piezas de pantalla (alumno y profe) ---
 function abonoBarra(e, alumno){
   const t = e.total;
@@ -2151,7 +2165,7 @@ function renderAdminAbonos(){
   if(filtro) filas = filas.filter(({p})=> (p.nombre||'').toLowerCase().includes(filtro) || (p.apodo||'').toLowerCase().includes(filtro) || (p.dni||'').includes(filtro));
   filas = filas.slice().sort((a,b)=> ordenAbono(a.e)-ordenAbono(b.e) || (a.p.nombre||'').localeCompare(b.p.nombre||''));
   return `
-    <div class="search-box">${icon('search')}<input type="text" id="inpBuscarAbono" placeholder="Buscar por nombre, apodo o DNI" value="${escapeHtml(state.filtroAbono)}"></div>
+    ${buscadorHtml('inpBuscarAbono', 'Buscar por nombre, apodo o DNI', state.filtroAbono)}
     <div class="abono-filtros">${grupos.map(([id,label,n])=>`<button class="abono-filtro ${state.abonoGrupo===id?'activo':''}" data-grupo="${id}">${label} <b>${n}</b></button>`).join('')}</div>
     ${filas.length===0 ? `<div class="empty-state">No hay alumnos en esta lista.</div>` : filas.map(({p,e})=>renderAbonoCard(p, e)).join('')}
     <p class="empty-note">El abono dura hasta el mismo día del mes siguiente a la fecha de pago. Las clases salen del plan de cada alumno (se editan en Portada) y se descuentan al reservar. Al renovar, las que sobraban no se acumulan.</p>
@@ -2236,7 +2250,7 @@ function renderAdminAlumnos(){
   let lista = aprobados.filter(p=> alumnoOculto(p.dni)===verOcultos);
   if(filtro) lista = lista.filter(a=> (a.nombre||'').toLowerCase().includes(filtro) || (a.apodo||'').toLowerCase().includes(filtro) || (a.dni||'').includes(filtro) || (a.telefono||'').includes(filtro));
 
-  const searchBox = `<div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar por nombre, apodo, DNI o teléfono" value="${escapeHtml(state.filtroAlumno)}"></div>`
+  const searchBox = buscadorHtml('inpBuscarAlumno', 'Buscar por nombre, apodo, DNI o teléfono', state.filtroAlumno)
     + (totalOcultos>0 ? `<div style="margin:-6px 0 14px;"><button class="tiny-btn" id="btnVerOcultos">${verOcultos ? '← Volver a los alumnos' : 'Ver alumnos ocultos ('+totalOcultos+')'}</button></div>` : '');
   const opcionesPlan = [['','Sin plan'], ...planesDisponibles().map(([id,p])=>[id,p.nombre])];
 
@@ -2584,7 +2598,7 @@ function renderAdminGrupoFicha(){
       </div>
       <div class="dash-block">
         <h3 class="dash-block-title">Miembros</h3>
-        <div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar alumno" value="${escapeHtml(state.filtroAlumno)}"></div>
+        ${buscadorHtml('inpBuscarAlumno', 'Buscar alumno', state.filtroAlumno)}
         ${miembrosPosibles.sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'')).map(a=>`
           <div class="admin-alumno" style="padding:8px 0; border-bottom:1px solid var(--border);">
             <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
@@ -3155,8 +3169,7 @@ function bindEvents(){
 
     if(state.adminTab==='abonos'){
       bindAbonoCardEvents($, $$);
-      const buscarAb = $('#inpBuscarAbono');
-      if(buscarAb) buscarAb.oninput = e=>{ state.filtroAbono = e.target.value; const pos = e.target.selectionStart; render(); const nuevo = $('#inpBuscarAbono'); if(nuevo){ nuevo.focus(); nuevo.setSelectionRange(pos, pos); } };
+      bindBuscador($$, 'inpBuscarAbono', 'filtroAbono');
       $$('.abono-filtro').forEach(b=> b.onclick = ()=>{ state.abonoGrupo = b.dataset.grupo; render(); });
     }
 
@@ -3214,8 +3227,7 @@ function bindEvents(){
       $$('.btn-avisar-aprobacion').forEach(a=>{ a.onclick = ()=>{ setTimeout(()=>{ state.avisoAprobacion=null; render(); }, 150); }; });
       $$('.btn-cerrar-aviso-aprobacion').forEach(b=>{ b.onclick = ()=>{ state.avisoAprobacion=null; render(); }; });
 
-      const buscar = $('#inpBuscarAlumno');
-      if(buscar) buscar.oninput = e=>{ state.filtroAlumno = e.target.value; render(); };
+      bindBuscador($$, 'inpBuscarAlumno', 'filtroAlumno');
       const chkTodos = $('#chkTodos');
       if(chkTodos) chkTodos.onchange = ()=>{ $$('.chk-alumno').forEach(c=> c.checked = chkTodos.checked); };
       const btnTodos = $('#btnRecordarTodos');
@@ -3411,8 +3423,7 @@ function bindEvents(){
 
   if(state.view==='adminGrupo'){
     bindRutinaEditorEvents($, $$, { grupoId: state.adminGrupoId });
-    const buscar = $('#inpBuscarAlumno');
-    if(buscar) buscar.oninput = e=>{ state.filtroAlumno = e.target.value; render(); };
+    bindBuscador($$, 'inpBuscarAlumno', 'filtroAlumno');
     $$('.chk-miembro-grupo').forEach(chk=>{
       chk.onchange = async ()=>{
         const p = perfiles[chk.dataset.dni];
