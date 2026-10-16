@@ -133,7 +133,7 @@
   .abono-filtro{ background:none; border:1px solid var(--border-strong); color:var(--muted); border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-body); }
   .abono-filtro b{ font-weight:800; margin-left:4px; }
   .abono-filtro.activo{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
-  .abono-aviso{ padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.5; margin-bottom:10px; background:rgba(242,193,78,0.14); border:1px solid rgba(242,193,78,0.32); color:#F2C14E; }
+  .abono-aviso{ padding:9px 12px; border-radius:9px; font-size:13px; line-height:1.5; margin-bottom:10px; background:var(--accent-soft); border:1px solid rgba(169,184,255,0.22); color:var(--accent); }
   .abono-aviso.danger{ background:var(--warn-soft); border-color:rgba(255,133,119,0.32); color:var(--warn); }
   .abono-wa{ margin:0 0 12px; }
   .abono-card{ background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
@@ -356,7 +356,7 @@
   .tab-badge{ display:inline-block; min-width:16px; padding:0 5px; margin-left:3px; border-radius:999px; background:var(--accent-2); color:#fff; font-size:10px; font-weight:800; line-height:16px; text-align:center; vertical-align:1px; }
   .admin-tabs{ scrollbar-width:none; }
   .admin-tabs::-webkit-scrollbar{ display:none; }
-  @media(max-width:420px){ .admin-tabs{ gap:2px; } .admin-tab{ padding-left:3px; padding-right:3px; font-size:12px; } }
+  @media(max-width:420px){ .admin-tabs{ gap:1px; } .admin-tab{ padding-left:2px; padding-right:2px; font-size:11px; } .tab-badge{ margin-left:2px; padding:0 4px; } }
   .solicitud-item{ display:flex; flex-direction:column; gap:12px; }
   .solicitud-info{ display:flex; flex-direction:column; gap:2px; min-width:0; font-size:13.5px; }
   .solicitud-acciones{ display:flex; gap:8px; }
@@ -1071,19 +1071,20 @@ function chequearAbono(perfil, fecha, opts){
   return { ok:true };
 }
 
+function diasDeAbono(e){ return e.D===0 ? 'Hoy es el último día de tu abono' : e.D===1 ? 'Queda 1 día de tu abono' : `Quedan ${e.D} días de tu abono`; }
 function avisosAlumno(e){
   if(!e || e.tipo!=='abono') return [];
   const q = e.quedan;
   const texto = {
-    vencido:   [`danger`, `Tu abono venció el ${fechaCorta(e.vence)}. Para reservar de nuevo hay que renovarlo.`],
-    sinClases: [`danger`, `Usaste las ${e.total} clases de tu abono. Para seguir entrenando, hay que renovarlo.`],
-    porVencer: [`warn`,   `Tu abono ${fraseVence(e)}. Para seguir entrenando, renová.`],
-    ultimas:   [`warn`,   `${q===1 ? 'Te queda 1 clase' : `Te quedan ${q} clases`} de tu abono. Andá pensando en renovar.`],
-    sobran:    [`warn`,   `Te quedan ${q} clases y tu abono ${e.D===0 ? 'vence hoy' : e.D===1 ? 'vence mañana' : `vence en ${e.D} días`}. Reservá para no perderlas.`],
+    vencido:   [`danger`, `Tu abono venció el ${fechaCorta(e.vence)}. Renovalo para seguir reservando.`],
+    sinClases: [`danger`, `Usaste las ${e.total} clases de tu abono. Cuando quieras, renovalo para seguir entrenando.`],
+    porVencer: [`info`,   `${diasDeAbono(e)} (vence el ${fechaCorta(e.vence)}).`],
+    ultimas:   [`info`,   `${q===1 ? 'Te queda 1 clase' : `Te quedan ${q} clases`} de tu abono.`],
+    sobran:    [`info`,   `${diasDeAbono(e)} y te quedan ${q} clases. ¡Aprovechalas!`],
   };
   return e.avisos.slice(0,2).map(a=>({ nivel:texto[a][0], texto:texto[a][1] }));
 }
-function pideRenovacion(e){ return !!e && e.tipo==='abono' && e.avisos.some(a=> a==='vencido' || a==='sinClases' || a==='porVencer'); }
+function pideRenovacion(e){ return !!e && e.tipo==='abono' && e.avisos.some(a=> a==='vencido' || a==='sinClases'); }
 
 function mensajeRenovarAlumno(nombre, dni){ return `¡Hola! Soy ${nombre} (DNI ${dni}). Quiero renovar mi abono en ${CONFIG.nombreEspacio}.`; }
 function mensajeAbonoClases(perfil, e){
