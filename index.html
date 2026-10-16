@@ -128,6 +128,8 @@
   .abono-nuevo{ display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-top:10px; }
   .abono-nuevo label{ display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--muted); font-weight:600; }
   .abono-nuevo input{ background:var(--bg-elev-2); border:1px solid var(--border-strong); border-radius:8px; padding:8px 10px; font-size:13px; font-family:var(--font-body); color:var(--text); color-scheme:dark; }
+  .abono-aviso-clases{ font-size:12.5px; line-height:1.45; margin:8px 0 0; padding:8px 10px; border-radius:8px; background:rgba(242,193,78,0.14); border:1px solid rgba(242,193,78,0.32); color:#F2C14E; }
+  .abono-aviso-clases[hidden]{ display:none; }
   .abono-nota{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.45; }
   .abono-filtros{ display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
   .abono-filtro{ background:none; border:1px solid var(--border-strong); color:var(--muted); border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-body); }
@@ -630,8 +632,10 @@ async function saveConfig(){
 // Los planes guardados antes de los abonos no tienen "clases por abono": se completa con las de la semana × 4.
 function normalizarPlanes(){
   if(!CONFIG.abonos) CONFIG.abonos = {};
-  Object.values(CONFIG.planes||{}).forEach(p=>{
+  const nombresBase = { x2:'MOTUS X2', x3:'MOTUS X3', full:'MOTUS FULL', perso:'MOTUS PERSO' };
+  Object.entries(CONFIG.planes||{}).forEach(([id,p])=>{
     if(p.clasesPorAbono===undefined) p.clasesPorAbono = p.clasesPorSemana!=null ? p.clasesPorSemana*4 : null;
+    if(!(p.nombre||'').trim()) p.nombre = nombresBase[id] || id.toUpperCase();   // PERSO estaba guardado con el nombre vacío
   });
 }
 // Varios profes usan el panel a la vez: antes de guardar se trae la configuración más reciente,
@@ -2054,8 +2058,8 @@ function renderSolicitudesRegistro(){
   `;
 }
 
-// Planes que se pueden elegir: los que tienen nombre (un plan con el nombre vacío se considera sacado).
-function planesDisponibles(){ return Object.entries(CONFIG.planes).filter(([,p])=> (p.nombre||'').trim()!==''); }
+// Planes que se pueden elegir.
+function planesDisponibles(){ return Object.entries(CONFIG.planes); }
 // Asigna (o saca) el plan de un alumno. Primer plan de un alumno sin abono: el abono arranca hoy (la fecha se corrige en Abonos).
 async function asignarPlan(p, planId){
   const antes = p.plan;
@@ -2081,23 +2085,27 @@ function renderAbonoCard(p, e){
   const dni = escapeHtml(p.dni);
   const etiquetas = { vencido:['Vencido','danger'], sinClases:['Sin clases','danger'], porVencer:['Falta poco para pagar','warn'], ultimas:['Últimas clases','warn'], sobran:['Le sobran clases','warn'], ok:['Al día','ok'] };
   let chip, meta, cuerpo = '', acciones = '';
-  const formFecha = (valor, textoBtn)=> `
-    <div class="abono-nuevo">
-      <label>Fecha de pago <input type="date" class="inp-abono-pago" data-dni="${dni}" value="${valor}"></label>
-      <button class="mini-btn btn-guardar-abono" data-dni="${dni}">${textoBtn}</button>
-    </div>`;
-  if(e.tipo==='sinPlan'){
-    chip = ['Sin plan','gris']; meta = 'Elegí un plan para controlar su abono.';
-    cuerpo = `
+  // Formulario único: plan, fecha de pago y clases del abono. Las clases vienen con las del plan y avisa si se cambian.
+  const formAbono = (pago, textoBtn)=>{
+    const ab = abonoDe(p.dni) || {};
+    const plan = p.plan ? CONFIG.planes[p.plan] : null;
+    const valorClases = ab.clases || (plan && plan.clasesPorAbono>0 ? plan.clasesPorAbono : '');
+    return `
       <div class="abono-nuevo">
-        <label>Plan <select class="sel-plan-abono" data-dni="${dni}"><option value="">Elegir plan…</option>${planesDisponibles().map(([id,pl])=>`<option value="${id}">${escapeHtml(pl.nombre)}${pl.clasesPorAbono>0 ? ' · '+pl.clasesPorAbono+' clases' : ''}</option>`).join('')}</select></label>
-        <button class="mini-btn btn-asignar-plan" data-dni="${dni}">Asignar plan</button>
+        <label>Plan <select class="sel-plan-abono" data-dni="${dni}">${p.plan ? '' : '<option value="">Elegir plan…</option>'}${planesDisponibles().map(([id,pl])=>`<option value="${id}" ${id===p.plan?'selected':''}>${escapeHtml(pl.nombre)}${pl.clasesPorAbono>0 ? ' · '+pl.clasesPorAbono+' clases' : ''}</option>`).join('')}</select></label>
+        <label>Fecha de pago <input type="date" class="inp-abono-pago" data-dni="${dni}" value="${pago}"></label>
+        <label>Clases del abono <input type="number" min="1" class="inp-abono-clases" data-dni="${dni}" value="${valorClases}" placeholder="ej: 12"></label>
+        <button class="mini-btn btn-guardar-abono" data-dni="${dni}">${textoBtn}</button>
       </div>
-      <p class="abono-nota">Al asignarlo, el abono arranca hoy (después podés cambiar la fecha de pago).</p>`;
+      <p class="abono-aviso-clases" hidden></p>`;
+  };
+  if(e.tipo==='sinPlan'){
+    chip = ['Sin plan','gris']; meta = 'Sin plan';
+    cuerpo = formAbono(hoyKey(), 'Empezar abono');
   }else if(e.tipo==='sinFecha'){
     chip = ['Sin fecha de pago','gris'];
     meta = `${escapeHtml(e.plan)}${e.total!=null ? ' · '+e.total+' clases por abono' : ''}`;
-    cuerpo = `<p class="abono-nota">Hasta que cargues la fecha de pago sigue con el límite por semana de siempre.</p>` + formFecha(hoyKey(), 'Empezar abono');
+    cuerpo = `<p class="abono-nota">Hasta que cargues la fecha de pago sigue con el límite por semana de siempre.</p>` + formAbono(hoyKey(), 'Empezar abono');
   }else{
     chip = (e.estado==='ok' && e.total==null) ? ['Sin tope','gris'] : etiquetas[e.estado];
     meta = `${escapeHtml(e.plan)} · pagó el ${fechaCorta(e.pago)} · vence el ${fechaCorta(e.vence)}`;
@@ -2124,11 +2132,7 @@ function renderAbonoCard(p, e){
       </div>
       <details class="abono-editar">
         <summary>Editar</summary>
-        ${formFecha(e.pago, 'Guardar')}
-        <div class="abono-nuevo">
-          <label>Clases del abono <input type="number" min="1" class="inp-abono-clases" data-dni="${dni}" value="${(abonoDe(p.dni)||{}).clases||''}" placeholder="${e.total!=null ? e.total+' (del plan)' : 'ej: 12'}"></label>
-        </div>
-        <p class="abono-nota">Dejá "Clases del abono" vacío para usar las del plan.</p>
+        ${formAbono(e.pago, 'Guardar')}
       </details>`;
   }
   return `
@@ -2159,14 +2163,25 @@ function renderAdminAbonos(){
 }
 
 function bindAbonoCardEvents($, $$){
-  $$('.btn-asignar-plan').forEach(btn=>{
-    btn.onclick = protegido(btn, async ()=>{
-      const p = perfiles[btn.dataset.dni];
-      const sel = btn.closest('.abono-prof').querySelector('.sel-plan-abono');
-      if(!p) return;
-      if(!sel.value){ alert('Elegí un plan.'); return; }
-      if(await asignarPlan(p, sel.value)) render();
-    }, 'Asignando…');
+  // Aviso en vivo: si las clases del abono no coinciden con las del plan, que se vea.
+  const avisoClases = card=>{
+    const aviso = card.querySelector('.abono-aviso-clases');
+    if(!aviso) return;
+    const sel = card.querySelector('.sel-plan-abono');
+    const plan = sel && sel.value ? CONFIG.planes[sel.value] : null;
+    const def = plan && plan.clasesPorAbono>0 ? plan.clasesPorAbono : null;
+    const val = parseInt(card.querySelector('.inp-abono-clases').value) || 0;
+    let msg = '';
+    if(plan && def && val>0 && val!==def) msg = `Ojo: el plan ${plan.nombre} es de ${def} clases al mes y estás poniendo ${val}.`;
+    else if(plan && !def && !val) msg = `El plan ${plan.nombre} no tiene una cantidad fija: cargá cuántas clases tiene por abono.`;
+    aviso.textContent = msg; aviso.hidden = !msg;
+  };
+  $$('.abono-prof').forEach(card=>{
+    avisoClases(card);
+    const sel = card.querySelector('.sel-plan-abono');
+    const clasesEl = card.querySelector('.inp-abono-clases');
+    if(sel && clasesEl) sel.onchange = ()=>{ const pl = CONFIG.planes[sel.value]; clasesEl.value = pl && pl.clasesPorAbono>0 ? pl.clasesPorAbono : ''; avisoClases(card); };
+    if(clasesEl) clasesEl.oninput = ()=> avisoClases(card);
   });
   $$('.btn-ir-asistencia').forEach(btn=>{
     btn.onclick = ()=>{
@@ -2178,14 +2193,26 @@ function bindAbonoCardEvents($, $$){
   $$('.btn-guardar-abono').forEach(btn=>{
     btn.onclick = protegido(btn, async ()=>{
       const dni = btn.dataset.dni;
+      const p = perfiles[dni];
+      if(!p) return;
       const card = btn.closest('.abono-prof');
+      const planId = card.querySelector('.sel-plan-abono').value;
+      if(!planId){ alert('Elegí un plan.'); return; }
+      const plan = CONFIG.planes[planId];
+      const def = plan && plan.clasesPorAbono>0 ? plan.clasesPorAbono : null;
       const pago = card.querySelector('.inp-abono-pago').value;
       if(!/^\d{4}-\d{2}-\d{2}$/.test(pago)){ alert('Elegí la fecha de pago.'); return; }
-      if(sumarUnMes(pago) < hoyKey() && !confirm(`Con esa fecha el abono ya está vencido (venció el ${fechaCorta(sumarUnMes(pago))}) y el alumno no va a poder reservar hasta que lo renueves.\n\n¿Guardar igual?`)) return;
       const clasesEl = card.querySelector('.inp-abono-clases');
-      const clases = clasesEl && clasesEl.value!=='' ? Math.max(1, parseInt(clasesEl.value)||0) : null;
+      const clases = clasesEl.value!=='' ? Math.max(1, parseInt(clasesEl.value)||0) : null;
+      if(!def && !clases){ alert(`El plan ${plan.nombre} no tiene una cantidad fija de clases: cargá cuántas clases tiene por abono.`); return; }
+      if(def && clases && clases!==def && !confirm(`El plan ${plan.nombre} es de ${def} clases al mes y vas a guardar ${clases}.\n\n¿Guardar igual?`)) return;
+      if(sumarUnMes(pago) < hoyKey() && !confirm(`Con esa fecha el abono ya está vencido (venció el ${fechaCorta(sumarUnMes(pago))}) y el alumno no va a poder reservar hasta que lo renueves.\n\n¿Guardar igual?`)) return;
+      if(planId!==p.plan){
+        const antes = p.plan; p.plan = planId;
+        if(!(await savePerfiles([p]))){ p.plan = antes; return; }
+      }
       const datos = { pago };
-      if(clases) datos.clases = clases;
+      if(clases && clases!==def) datos.clases = clases;   // solo se guarda si es distinto al del plan
       if(await setAbono(dni, datos)) render();
     }, 'Guardando…');
   });
