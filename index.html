@@ -1773,14 +1773,17 @@ function renderAdminDashboard(){
   const huecos = huecosLibres(6);
   const nPendientes = solicitudesPendientes().length;
   const nAvisos = abonosDeAlumnos().filter(x=> x.e.tipo==='abono' && x.e.avisos.length>0).length;
-  const nSinMarcar = clasesSinMarcar(null, fechaKey(addDays(new Date(), -30))).length;
+  const sinMarcarTodas = clasesSinMarcar(null).filter(r=> r.dni && perfiles[r.dni]);   // solo las que se pueden abrir desde la ficha de un alumno
+  const nSinMarcar = sinMarcarTodas.length;
+  const sinMarcarPorAlumno = {};
+  sinMarcarTodas.forEach(r=>{ if(r.dni && perfiles[r.dni]) sinMarcarPorAlumno[r.dni] = (sinMarcarPorAlumno[r.dni]||0)+1; });
 
   return `
     ${nSinMarcar>0 ? `
       <div class="aviso-solicitudes">
         <p class="aviso-titulo">${nSinMarcar===1 ? '1 clase sin marcar asistencia' : nSinMarcar+' clases sin marcar asistencia'}</p>
-        <p class="aviso-texto">Marcá si asistieron o faltaron.</p>
-        <div class="aviso-acciones"><button class="mini-btn ok" id="btnIrAsistencia">Marcar asistencia</button></div>
+        <p class="aviso-texto">Tocá un alumno para marcar si asistió o faltó.</p>
+        <div class="aviso-acciones">${Object.entries(sinMarcarPorAlumno).sort((a,b)=>b[1]-a[1]).map(([dni,n])=>`<button class="mini-btn btn-ir-asistencia" data-dni="${escapeHtml(dni)}">${escapeHtml(nombrePreferido(perfiles[dni].nombre, perfiles[dni].apodo))} (${n})</button>`).join('')}</div>
       </div>` : ''}
     ${nAvisos>0 ? `
       <div class="aviso-solicitudes">
@@ -1856,20 +1859,6 @@ function bindAsistenciaEvents($$){
     }, 'Guardando…');
   });
 }
-function renderClasesSinMarcar(){
-  const lista = clasesSinMarcar(null, fechaKey(addDays(new Date(), -30)));
-  if(lista.length===0) return '';
-  return `
-    <div class="admin-day-group">
-      <div class="admin-day-title-row"><h3 class="admin-day-title">Clases sin marcar (${lista.length})</h3></div>
-      <p class="empty-note" style="margin:0 0 10px;">Clases de los últimos 30 días sin asistencia cargada.</p>
-      ${lista.map(r=>`
-        <div class="admin-slot asist-fila">
-          <div><span class="admin-alumno-name">${escapeHtml(r.nombre)}</span><br><span class="admin-alumno-tel">${formatFechaLarga(r.fecha)} · ${r.hora}</span></div>
-          ${botonesAsistencia(r)}
-        </div>`).join('')}
-    </div>`;
-}
 function renderAsistenciaAlumno(dni){
   const hoy = hoyKey();
   const desde = fechaKey(addDays(new Date(), -56));
@@ -1896,7 +1885,7 @@ function renderAsistenciaAlumno(dni){
 function renderAdminAgenda(){
   const fechas = proximasFechas(14);
   if(fechas.length===0) return `<div class="empty-state">No hay horarios cargados.</div>`;
-  return renderClasesSinMarcar() + fechas.map(f=>{
+  return fechas.map(f=>{
     const slots = (schedule[f.dia]||[]).slice().sort((a,b)=>a.hora.localeCompare(b.hora));
     if(slots.length===0) return '';
     return `
@@ -2162,6 +2151,12 @@ function renderAdminAbonos(){
   `;
 }
 
+// Abre la solapa Asistencia de la ficha de un alumno (desde el cartel de Hoy o desde su tarjeta de abono).
+function abrirAsistenciaAlumno(dni){
+  state.adminAlumnoDni = dni; state.adminAlumnoTab = 'asistencia';
+  state.registroDiaId=''; state.registroExtra=[]; state.turnosDiaSel=null; state.turnosPropuestos=[]; state.turnosCarrito=[];
+  state.view = 'adminAlumno'; render();
+}
 function bindAbonoCardEvents($, $$){
   // Aviso en vivo: si las clases del abono no coinciden con las del plan, que se vea.
   const avisoClases = card=>{
@@ -2183,13 +2178,7 @@ function bindAbonoCardEvents($, $$){
     if(sel && clasesEl) sel.onchange = ()=>{ const pl = CONFIG.planes[sel.value]; clasesEl.value = pl && pl.clasesPorAbono>0 ? pl.clasesPorAbono : ''; avisoClases(card); };
     if(clasesEl) clasesEl.oninput = ()=> avisoClases(card);
   });
-  $$('.btn-ir-asistencia').forEach(btn=>{
-    btn.onclick = ()=>{
-      state.adminAlumnoDni = btn.dataset.dni; state.adminAlumnoTab = 'asistencia';
-      state.registroDiaId=''; state.registroExtra=[]; state.turnosDiaSel=null; state.turnosPropuestos=[]; state.turnosCarrito=[];
-      state.view = 'adminAlumno'; render();
-    };
-  });
+  $$('.btn-ir-asistencia').forEach(btn=>{ btn.onclick = ()=> abrirAsistenciaAlumno(btn.dataset.dni); });
   $$('.btn-guardar-abono').forEach(btn=>{
     btn.onclick = protegido(btn, async ()=>{
       const dni = btn.dataset.dni;
@@ -3026,8 +3015,7 @@ function bindEvents(){
 
   if(state.view==='admin'){
     $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; state.avisoCancelacion=null; state.avisoAprobacion=null; await loadData(); render(); });
-    const btnIrAsistencia = $('#btnIrAsistencia');
-    if(btnIrAsistencia) btnIrAsistencia.onclick = async ()=>{ state.adminTab='agenda'; await loadData(); render(); };
+    $$('.btn-ir-asistencia').forEach(b=> b.onclick = ()=> abrirAsistenciaAlumno(b.dataset.dni));
     const btnIrAbonos = $('#btnIrAbonos');
     if(btnIrAbonos) btnIrAbonos.onclick = async ()=>{ state.adminTab='abonos'; state.abonoGrupo='todos'; state.filtroAbono=''; await loadData(); render(); };
     const btnIrSolicitudes = $('#btnIrSolicitudes');
