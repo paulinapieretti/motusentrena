@@ -112,6 +112,20 @@
   .plan-card{ flex:0 0 auto; width:180px; background:var(--bg-elev); border:1px solid var(--border); border-top:3px solid var(--accent-2); border-radius:8px; padding:18px 16px 16px; box-shadow:0 6px 18px -14px rgba(18,24,31,0.3); transition:transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s ease; }
   .plan-card:hover{ box-shadow:0 16px 30px -14px rgba(18,24,31,0.32); }
   .plan-card-count{ font-family:var(--font-display); font-size:32px; font-weight:800; line-height:1; margin:0; font-variant-numeric:tabular-nums; }
+  .abono-aviso{ padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.5; margin-bottom:10px; background:rgba(242,193,78,0.14); border:1px solid rgba(242,193,78,0.32); color:#F2C14E; }
+  .abono-aviso.danger{ background:var(--warn-soft); border-color:rgba(255,133,119,0.32); color:var(--warn); }
+  .abono-wa{ margin:0 0 12px; }
+  .abono-card{ background:var(--bg-elev); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  .abono-top{ display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); font-weight:600; }
+  .abono-big{ margin-top:6px; }
+  .abono-big b{ font-family:var(--font-display); font-size:34px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+  .abono-big span{ font-size:13px; color:var(--muted); margin-left:8px; }
+  .abono-bar{ display:flex; height:8px; border-radius:4px; background:rgba(255,255,255,0.1); overflow:hidden; margin-top:10px; }
+  .abono-bar .seg-ok{ background:var(--ok); } .abono-bar .seg-falto{ background:var(--warn); } .abono-bar .seg-sin{ background:#8a847d; } .abono-bar .seg-res{ background:var(--accent); }
+  .abono-stats{ display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12px; color:var(--muted); margin-top:8px; }
+  .abono-fechas{ display:flex; justify-content:space-between; gap:8px; font-size:13px; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+  .abono-fechas b{ font-weight:700; }
+  .plan-card-abono{ margin:6px 0 0; font-size:12px; font-weight:600; color:var(--accent); }
   .plan-card-count small{ display:block; font-family:var(--font-body); font-size:11px; font-weight:600; color:var(--muted); margin-top:3px; }
   .plan-card-name{ font-family:var(--font-display); font-size:18px; font-weight:700; margin:12px 0 6px; }
   .plan-card-desc{ font-size:12.5px; color:var(--muted); line-height:1.5; }
@@ -399,11 +413,14 @@ const CONFIG = {
 
   // Planes de entrenamiento. "perso" no tiene tope fijo: lo define el profesor por alumno.
   planes: {
-    x2:   { nombre:"MOTUS X2",   clasesPorSemana:2, desc:"Para incorporar el entrenamiento a tu rutina y generar hábitos sostenibles." },
-    x3:   { nombre:"MOTUS X3",   clasesPorSemana:3, desc:"El equilibrio entre frecuencia, progreso y bienestar. El plan más elegido." },
-    full: { nombre:"MOTUS FULL", clasesPorSemana:6, desc:"Para quienes quieren ir más lejos: más constancia, más avances, más resultados." },
-    perso:{ nombre:"MOTUS PERSO", clasesPorSemana:null, desc:"Entrená con tu profesor en un espacio diseñado para vos. Los días por semana los define Julián." },
+    x2:   { nombre:"MOTUS X2",   clasesPorSemana:2, clasesPorAbono:8,  desc:"Para incorporar el entrenamiento a tu rutina y generar hábitos sostenibles." },
+    x3:   { nombre:"MOTUS X3",   clasesPorSemana:3, clasesPorAbono:12, desc:"El equilibrio entre frecuencia, progreso y bienestar. El plan más elegido." },
+    full: { nombre:"MOTUS FULL", clasesPorSemana:6, clasesPorAbono:24, desc:"Para quienes quieren ir más lejos: más constancia, más avances, más resultados." },
+    perso:{ nombre:"MOTUS PERSO", clasesPorSemana:null, clasesPorAbono:null, desc:"Entrená con tu profesor en un espacio diseñado para vos. Los días por semana los define Julián." },
   },
+
+  // Abono de cada alumno: { [dni]: { pago:'AAAA-MM-DD', clases?:número } }. Vence el mismo día del mes siguiente.
+  abonos: {},
 
   testimonios: [
     { nombre:"Maru", texto:"Cambié totalmente mi forma de entrenar. Seguimiento real, no una rutina genérica." },
@@ -526,6 +543,7 @@ async function loadData(){
 
   if(cf.data && cf.data.data){ Object.assign(CONFIG, cf.data.data); }
   else{ await sb.from('config_sitio').insert({ id:1, data: CONFIG }); }
+  normalizarPlanes();
 
   comprobantes = (cp.data||[]).map(x=>({ id:x.id, dni:x.dni, url:x.url, subidoPor:x.subido_por, ts:x.ts }));
   testimonios = (ts.data||[]).map(x=>({ id:x.id, dni:x.dni, nombreMostrado:x.nombre_mostrado, texto:x.texto, ts:x.ts }));
@@ -579,6 +597,30 @@ async function saveConfig(){
   const { error } = await sb.from('config_sitio').upsert({ id:1, data: CONFIG });
   if(error){ console.error('Error guardando configuración:', error); alert('No se pudo guardar el cambio: '+error.message); return false; }
   return true;
+}
+
+// Los planes guardados antes de los abonos no tienen "clases por abono": se completa con las de la semana × 4.
+function normalizarPlanes(){
+  if(!CONFIG.abonos) CONFIG.abonos = {};
+  Object.values(CONFIG.planes||{}).forEach(p=>{
+    if(p.clasesPorAbono===undefined) p.clasesPorAbono = p.clasesPorSemana!=null ? p.clasesPorSemana*4 : null;
+  });
+}
+// Varios profes usan el panel a la vez: antes de guardar se trae la configuración más reciente,
+// así un cambio de un solo alumno no pisa lo que cargó otro profe un rato antes.
+async function modificarConfig(fn){
+  try{
+    const { data } = await sb.from('config_sitio').select('data').eq('id',1).maybeSingle();
+    if(data && data.data){ Object.assign(CONFIG, data.data); normalizarPlanes(); }
+  }catch(e){ console.error('No se pudo leer la configuración más reciente:', e); }
+  fn(CONFIG);
+  return saveConfig();
+}
+async function setAbono(dni, datos){
+  return modificarConfig(cfg=>{
+    if(!cfg.abonos) cfg.abonos = {};
+    if(datos) cfg.abonos[dni] = datos; else delete cfg.abonos[dni];
+  });
 }
 
 // --- Comprobantes de pago ---
@@ -666,18 +708,22 @@ async function asegurarReservasFijas(){
   dnisConFijo.forEach(dni=>{
     const perfil = perfiles[dni];
     if(!perfilAprobado(perfil)) return;
-    fijos[dni].forEach(fx=>{
-      fechas.filter(f=>f.dia===fx.dia).forEach(f=>{
-        const slot = getSlot(fx.dia, fx.horaId);
-        if(!slot) return;
-        // Si ya existe una reserva para esa fecha (activa o cancelada), no se toca: una cancelación puntual
-        // del entrenador para esa semana no debe volver a generarse sola en la próxima carga.
-        const yaExiste = reservas.some(r=> r.dni===dni && r.fecha===f.key && r.horaId===fx.horaId);
-        if(yaExiste) return;
-        if(cuposLibres(f.key, slot) <= 0) return;
-        const nueva = { id:uid(), fecha:f.key, dia:fx.dia, horaId:fx.horaId, hora:fx.hora, nombre:perfil.nombre, telefono:perfil.telefono, dni, estado:'confirmada', ts:Date.now(), grupoId:null };
-        reservas.push(nueva); nuevas.push(nueva);
-      });
+    // En orden de fecha, para que si el abono se queda sin clases lo que no se genera sea lo más lejano.
+    const candidatos = [];
+    fijos[dni].forEach(fx=> fechas.filter(f=>f.dia===fx.dia).forEach(f=> candidatos.push({ fx, f })));
+    candidatos.sort((a,b)=> a.f.key.localeCompare(b.f.key) || a.fx.hora.localeCompare(b.fx.hora));
+    candidatos.forEach(({ fx, f })=>{
+      const slot = getSlot(fx.dia, fx.horaId);
+      if(!slot) return;
+      // Si ya existe una reserva para esa fecha (activa o cancelada), no se toca: una cancelación puntual
+      // del entrenador para esa semana no debe volver a generarse sola en la próxima carga.
+      const yaExiste = reservas.some(r=> r.dni===dni && r.fecha===f.key && r.horaId===fx.horaId);
+      if(yaExiste) return;
+      if(cuposLibres(f.key, slot) <= 0) return;
+      // Con abono, solo dentro del período y mientras queden clases disponibles.
+      if(!chequearAbono(perfil, f.key).ok) return;
+      const nueva = { id:uid(), fecha:f.key, dia:fx.dia, horaId:fx.horaId, hora:fx.hora, nombre:perfil.nombre, telefono:perfil.telefono, dni, estado:'confirmada', ts:Date.now(), grupoId:null };
+      reservas.push(nueva); nuevas.push(nueva);
     });
   });
   if(nuevas.length) await saveReservas(nuevas);
@@ -716,6 +762,7 @@ async function borrarAlumno(dni){
 
   delete perfiles[dni];
   if(horariosFijosDe(dni).length) await setHorariosFijos(dni, []);
+  if(abonoDe(dni)) await setAbono(dni, null);
   rutinaDias = rutinaDias.filter(d=>d.dni!==dni);
   rutinaEjercicios = rutinaEjercicios.filter(e=>!idsDias.includes(e.rutinaDiaId));
   registros = registros.filter(x=>x.dni!==dni);
@@ -874,6 +921,7 @@ async function aprobarRegistro(dni){
   if(perfiles[dni]){ perfiles[dni].creado = true; perfiles[dni].actualizado = data[0].actualizado; }
   // Una persona nueva no hereda horarios fijos viejos que hayan quedado de un alumno anterior con el mismo DNI.
   if(horariosFijosDe(dni).length) await setHorariosFijos(dni, []);
+  if(abonoDe(dni)) await setAbono(dni, null);
   return true;
 }
 // El filtro creado=false evita que por error se borre a un alumno ya aprobado.
@@ -903,6 +951,13 @@ function reservasEnSemanaDe(dni, fechaRef, excludeId){
 function mensajePlanEstado(perfil, fechaRef, excludeId){
   if(!perfil || !perfil.plan){
     return { texto:'Todavía no tenés un plan asignado — tu profesor te lo va a asignar pronto. Por ahora podés reservar sin límite.', bloqueado:false, plan:null };
+  }
+  // Con abono (plan + fecha de pago + clases) rige el abono de 30 días y se olvidan las semanas.
+  if(usaAbono(perfil)){
+    const e = estadoAbono(perfil, hoyKey(), excludeId ? reservas.filter(r=>r.id!==excludeId) : reservas);
+    const ch = chequearAbono(perfil, fechaRef || hoyKey(), { excluirId: excludeId });
+    return { texto: ch.ok ? `Te quedan ${e.quedan} de ${e.total} clases · ${fraseVence(e)}.` : ch.msg,
+             bloqueado: !ch.ok, motivo: ch.msg, plan: nombrePlan(perfil), abono: e };
   }
   const limite = limiteSemanal(perfil);
   if(limite===Infinity || limite==null){
@@ -1166,6 +1221,7 @@ function renderHome(){
           <div class="plan-card">
             <p class="plan-card-count">${p.clasesPorSemana ?? 'A medida'}${p.clasesPorSemana!=null?`<small>clases / semana</small>`:''}</p>
             <p class="plan-card-name">${p.nombre}</p>
+            ${p.clasesPorAbono>0 ? `<p class="plan-card-abono">${p.clasesPorAbono} clases por abono de 30 días</p>` : ''}
             <p class="plan-card-desc">${p.desc}</p>
           </div>`).join('')}
       </div>
@@ -1242,6 +1298,34 @@ function renderSolicitud(){
   `;
 }
 
+// --- Abonos: piezas de pantalla (alumno y profe) ---
+function abonoBarra(e, alumno){
+  const t = e.total;
+  if(!t) return '';
+  const w = n=> Math.min(100, n/t*100).toFixed(1);
+  const segs = alumno ? [['ok', e.A+e.S], ['falto', e.F], ['res', e.R]] : [['ok', e.A], ['falto', e.F], ['sin', e.S], ['res', e.R]];
+  return `<div class="abono-bar">${segs.filter(s=>s[1]>0).map(s=>`<span class="seg-${s[0]}" style="width:${w(s[1])}%"></span>`).join('')}</div>`;
+}
+// Avisos del abono para el alumno (hasta 2) y, si corresponde, el botón de WhatsApp para pedir la renovación.
+function abonoAvisosHtml(perfil, e, forzarWa){
+  const avisos = avisosAlumno(e).map(a=>`<div class="abono-aviso ${a.nivel}">${escapeHtml(a.texto)}</div>`).join('');
+  const wa = (CONFIG.whatsapp && (pideRenovacion(e) || forzarWa))
+    ? `<a class="wa-btn abono-wa" href="${waLink(CONFIG.whatsapp, mensajeRenovarAlumno(perfil.nombre, perfil.dni))}" target="_blank" rel="noopener">${icon('wa')} Pedir renovación por WhatsApp</a>` : '';
+  return avisos + wa;
+}
+function renderAbonoAlumno(perfil){
+  const e = estadoAbono(perfil, hoyKey());
+  return `
+    ${abonoAvisosHtml(perfil, e)}
+    <div class="abono-card">
+      <div class="abono-top"><span>${escapeHtml(e.plan)}</span><span>${e.total} clases por abono</span></div>
+      <div class="abono-big"><b>${e.quedan}</b><span>${e.quedan===1 ? 'clase para usar' : 'clases para usar'}</span></div>
+      ${abonoBarra(e, true)}
+      <div class="abono-stats"><span>Hiciste ${e.A+e.S}</span><span>Reservadas ${e.R}</span><span>Disponibles ${e.disponibles}</span>${e.F>0 ? `<span>Faltaste ${e.F}</span>` : ''}</div>
+      <div class="abono-fechas"><span>Pagaste el <b>${fechaCorta(e.pago)}</b></span><span>${e.D<0 ? 'Venció' : 'Vence'} el <b>${fechaCorta(e.vence)}</b></span></div>
+    </div>`;
+}
+
 function renderDia(){
   const fechas = proximasFechas(14);
   const chips = fechas.map(f=>{
@@ -1262,6 +1346,7 @@ function renderDia(){
         <p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p>
         <p class="plan-banner-msg">${estado.texto}</p>
       </div>
+      ${estado.abono ? abonoAvisosHtml(perfil, estado.abono, estado.bloqueado) : ''}
     `;
     if(state.limiteMsg){
       banner += `<div class="form-alert" style="display:block;">${state.limiteMsg}</div>`;
@@ -1386,6 +1471,10 @@ function renderConfirmacion(){
     msgTexto = `Hola! Reservé turno en ${CONFIG.nombreEspacio}: ` + resumen.map(r=>`${formatFechaLarga(r.fecha)} ${r.hora}`).join(' / ') + '.';
   }
   const msg = encodeURIComponent(msgTexto);
+  const perfilConf = state.identidad && perfiles[state.identidad.dni];
+  const lineaAbono = (!modoEspera && usaAbono(perfilConf))
+    ? (()=>{ const e = estadoAbono(perfilConf, hoyKey()); return `<p class="confirm-text">Te quedan ${e.quedan} de ${e.total} clases de tu abono · ${fraseVence(e)}.</p>`; })()
+    : '';
 
   return `
     <div class="confirm-wrap">
@@ -1393,6 +1482,7 @@ function renderConfirmacion(){
       <h2 class="confirm-title">${modoEspera ? '¡Anotado en la lista! ⏳' : '¡Reserva confirmada! 💪'}</h2>
       <p class="confirm-text">${modoEspera ? 'Te avisamos por WhatsApp si se libera un lugar:' : 'Te esperamos en:'}</p>
       <div class="confirm-list">${resumen.map(r=>`<div><span>${formatFechaLarga(r.fecha)}</span><span><b>${r.hora}</b></span></div>`).join('')}</div>
+      ${lineaAbono}
       <a class="wa-btn" href="https://wa.me/${CONFIG.whatsapp}?text=${msg}" target="_blank" rel="noopener">${icon('wa')} Escribir por WhatsApp</a>
       <button class="cta-secondary" id="btnVolverInicio">Volver al inicio</button>
     </div>
@@ -1481,7 +1571,9 @@ function renderMiSemana(){
     }else if(perfil){
       saludo = `<p class="section-eyebrow" style="margin-bottom:14px;">¡Hola, ${escapeHtml(nombreSaludo(perfil.nombre, perfil.dni))}!</p>`;
       const estado = mensajePlanEstado(perfil, hoyKey());
-      plan = `<div class="plan-banner ${estado.bloqueado?'blocked':''}"><p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p><p class="plan-banner-msg">${estado.texto}</p></div>`;
+      plan = estado.abono
+        ? renderAbonoAlumno(perfil)
+        : `<div class="plan-banner ${estado.bloqueado?'blocked':''}"><p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p><p class="plan-banner-msg">${estado.texto}</p></div>`;
       if(!estado.bloqueado) btnReservarOtra = `<button class="cta-primary" id="btnReservarOtraDesdeMiSemana" style="margin-top:14px;">+ Reservar otra clase</button>`;
     }
 
@@ -2219,7 +2311,8 @@ function renderAdminPortada(){
         <div class="admin-slot">
           <div class="alumno-edit-row" style="margin-top:0;">
             <div class="alumno-edit-col"><span class="alumno-edit-label">Nombre</span><input type="text" class="plan-field" data-plan="${id}" data-campo="nombre" value="${escapeHtml(p.nombre)}"></div>
-            <div class="alumno-edit-col"><span class="alumno-edit-label">Clases/semana</span><input type="number" min="0" class="plan-field" data-plan="${id}" data-campo="clasesPorSemana" value="${p.clasesPorSemana==null?'':p.clasesPorSemana}" placeholder="${id==='perso'?'lo define el profe':''}"></div>
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Por semana (referencia)</span><input type="number" min="0" class="plan-field" data-plan="${id}" data-campo="clasesPorSemana" value="${p.clasesPorSemana==null?'':p.clasesPorSemana}" placeholder="${id==='perso'?'lo define el profe':''}"></div>
+            <div class="alumno-edit-col"><span class="alumno-edit-label">Clases por abono (30 días)</span><input type="number" min="0" class="plan-field" data-plan="${id}" data-campo="clasesPorAbono" value="${p.clasesPorAbono==null?'':p.clasesPorAbono}" placeholder="${id==='perso'?'lo define el profe':''}"></div>
           </div>
           <div class="field" style="margin-top:8px; margin-bottom:0;"><input type="text" class="plan-field" data-plan="${id}" data-campo="desc" value="${escapeHtml(p.desc)}"></div>
         </div>
@@ -2354,7 +2447,7 @@ function bindEvents(){
           await loadData();
           const perfil = perfiles[r.dni];
           const estado = mensajePlanEstado(perfil, state.fechaSel, r.id);
-          if(estado.bloqueado){ state.limiteMsg = 'No podés mover el turno a esa semana: ya usaste tus clases de ese período según tu plan.'; render(); return; }
+          if(estado.bloqueado){ state.limiteMsg = estado.motivo || 'No podés mover el turno a esa semana: ya usaste tus clases de ese período según tu plan.'; render(); return; }
           const slotFresco = getSlot(dia, slot.id);
           if(cuposLibres(state.fechaSel, slotFresco) <= 0){ alert('Ese horario se completó. Elegí otro.'); render(); return; }
           const r2 = reservas.find(x=>x.id===state.modoModificar);
@@ -2365,6 +2458,8 @@ function bindEvents(){
         }
 
         if(full){
+          const chEspera = chequearAbono(perfiles[state.identidad.dni], state.fechaSel);
+          if(!chEspera.ok){ state.limiteMsg = chEspera.msg; render(); return; }
           state.slotSel = card.dataset.slot; state.modoEspera = true; state.carrito=[];
           state.view='form'; render(); return;
         }
@@ -2379,13 +2474,19 @@ function bindEvents(){
         await loadData();
         const perfil = perfiles[state.identidad.dni];
         if(!perfilAprobado(perfil)){ state.limiteMsg = MSG_SIN_APROBAR; render(); return; }
+        // Con abono rige el abono de 30 días (sin tope por semana); sin fecha de pago, la regla semanal de siempre.
+        const conAbono = usaAbono(perfil);
+        if(conAbono){
+          const chAbono = chequearAbono(perfil, state.fechaSel, { extra: state.carrito.length });
+          if(!chAbono.ok){ state.limiteMsg = chAbono.msg; render(); return; }
+        }
         const yaEnCarritoMismaSemana = state.carrito.filter(c=>{
           const inicioA = fechaKey(inicioSemana(parseFechaKey(c.fecha)));
           const inicioB = fechaKey(inicioSemana(parseFechaKey(state.fechaSel)));
           return inicioA===inicioB;
         }).length;
         const usadasPrevias = reservasEnSemanaDe(state.identidad.dni, state.fechaSel);
-        const limite = limiteSemanal(perfil);
+        const limite = conAbono ? Infinity : limiteSemanal(perfil);
         if(limite!==Infinity && (usadasPrevias + yaEnCarritoMismaSemana + 1) > limite){
           state.limiteMsg = `Ya reservaste (o seleccionaste) tus ${limite} clases de esta semana según tu plan${perfil&&perfil.plan?' '+nombrePlan(perfil):''}. Elegí otra semana o hablá con tu profesor.`;
           render();
@@ -2420,6 +2521,8 @@ function bindEvents(){
         const dia = nombreDiaSemana(parseFechaKey(state.fechaSel));
         const slot = getSlot(dia, state.slotSel);
         if(!slot){ alertBox.textContent='Ese horario ya no existe.'; alertBox.style.display='block'; return; }
+        const chEspera = chequearAbono(perfiles[dni], state.fechaSel);
+        if(!chEspera.ok){ alertBox.textContent = chEspera.msg; alertBox.style.display='block'; return; }
         if(waitlist.some(w=> w.dni===dni && w.fecha===state.fechaSel && w.horaId===slot.id)){ alertBox.textContent='Ya estás anotado/a en la lista de espera de ese horario.'; alertBox.style.display='block'; return; }
         waitlist.push({ id:uid(), fecha:state.fechaSel, dia, horaId:slot.id, hora:slot.hora, nombre, telefono, dni, ts:Date.now(), estado:'esperando' });
         if(!(await saveWaitlist())) return;
@@ -2429,14 +2532,23 @@ function bindEvents(){
 
       if(state.carrito.length===0){ alertBox.textContent='Elegí al menos un horario.'; alertBox.style.display='block'; return; }
 
-      // re-chequeo defensivo del límite semanal por si cambió algo entre pasos
+      // re-chequeo defensivo del abono (o del límite semanal, si no tiene fecha de pago) por si cambió algo entre pasos
       const perfil = perfiles[dni];
+      const conAbono = usaAbono(perfil);
+      if(conAbono){
+        let extra = 0;
+        for(const item of state.carrito){
+          const chAbono = chequearAbono(perfil, item.fecha, { extra });
+          if(!chAbono.ok){ alertBox.textContent = chAbono.msg; alertBox.style.display='block'; return; }
+          extra++;
+        }
+      }
       const semanasEnCarrito = {};
       for(const item of state.carrito){
         const semanaKey = fechaKey(inicioSemana(parseFechaKey(item.fecha)));
         semanasEnCarrito[semanaKey] = (semanasEnCarrito[semanaKey]||0)+1;
       }
-      const limite = limiteSemanal(perfil);
+      const limite = conAbono ? Infinity : limiteSemanal(perfil);
       if(limite!==Infinity){
         for(const semanaKey of Object.keys(semanasEnCarrito)){
           const usadas = reservasEnSemanaDe(dni, semanaKey);
@@ -2739,6 +2851,7 @@ function bindEvents(){
         };
         perfiles[dni] = nuevo;
         if(!(await savePerfiles([nuevo]))){ delete perfiles[dni]; return; }
+        if(nuevo.plan) await setAbono(dni, { pago: hoyKey() });
         state.mostrarNuevoAlumno=false;
         render();
       };
@@ -2777,8 +2890,11 @@ function bindEvents(){
         sel.onchange = async ()=>{
           const p = perfiles[sel.dataset.dni];
           if(p){
+            const teniaPlan = !!p.plan;
             p.plan = sel.value || null;
             await savePerfiles([p]);
+            // Primer plan de un alumno sin abono: el abono arranca hoy (la fecha se puede cambiar en Abonos).
+            if(p.plan && !teniaPlan && !abonoDe(p.dni)) await setAbono(p.dni, { pago: hoyKey() });
             render();
           }
         };
@@ -2848,6 +2964,7 @@ function bindEvents(){
           const plan = CONFIG.planes[inp.dataset.plan];
           if(!plan) return;
           if(inp.dataset.campo==='clasesPorSemana'){ plan.clasesPorSemana = inp.value===''? null : parseInt(inp.value)||0; }
+          else if(inp.dataset.campo==='clasesPorAbono'){ plan.clasesPorAbono = inp.value===''? null : parseInt(inp.value)||0; }
           else{ plan[inp.dataset.campo] = inp.value; }
           await saveConfig();
           render();
