@@ -112,6 +112,27 @@
   .plan-card{ flex:0 0 auto; width:180px; background:var(--bg-elev); border:1px solid var(--border); border-top:3px solid var(--accent-2); border-radius:8px; padding:18px 16px 16px; box-shadow:0 6px 18px -14px rgba(18,24,31,0.3); transition:transform .25s cubic-bezier(.2,.7,.3,1), box-shadow .25s ease; }
   .plan-card:hover{ box-shadow:0 16px 30px -14px rgba(18,24,31,0.32); }
   .plan-card-count{ font-family:var(--font-display); font-size:32px; font-weight:800; line-height:1; margin:0; font-variant-numeric:tabular-nums; }
+  .abono-prof-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .abono-meta{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .abono-chip{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; background:var(--bg-elev-2); color:var(--muted); }
+  .abono-chip.ok{ background:var(--ok-soft); color:var(--ok); }
+  .abono-chip.warn{ background:rgba(242,193,78,0.16); color:#F2C14E; }
+  .abono-chip.danger{ background:var(--warn-soft); color:var(--warn); }
+  .abono-stats-prof{ display:flex; justify-content:space-between; gap:6px 12px; flex-wrap:wrap; font-size:12.5px; margin-top:8px; }
+  .abono-stats-prof b{ font-weight:700; }
+  .abono-prof .abono-stats{ margin-top:4px; }
+  .abono-acciones{ display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+  .abono-acciones .mini-btn svg{ width:14px; height:14px; vertical-align:-2px; margin-right:4px; }
+  .abono-editar{ margin-top:10px; font-size:12.5px; }
+  .abono-editar summary{ cursor:pointer; color:var(--muted); font-weight:600; }
+  .abono-nuevo{ display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-top:10px; }
+  .abono-nuevo label{ display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--muted); font-weight:600; }
+  .abono-nuevo input{ background:var(--bg-elev-2); border:1px solid var(--border-strong); border-radius:8px; padding:8px 10px; font-size:13px; font-family:var(--font-body); color:var(--text); color-scheme:dark; }
+  .abono-nota{ font-size:12px; color:var(--muted); margin:8px 0 0; line-height:1.45; }
+  .abono-filtros{ display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; }
+  .abono-filtro{ background:none; border:1px solid var(--border-strong); color:var(--muted); border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-body); }
+  .abono-filtro b{ font-weight:800; margin-left:4px; }
+  .abono-filtro.activo{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
   .abono-aviso{ padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.5; margin-bottom:10px; background:rgba(242,193,78,0.14); border:1px solid rgba(242,193,78,0.32); color:#F2C14E; }
   .abono-aviso.danger{ background:var(--warn-soft); border-color:rgba(255,133,119,0.32); color:var(--warn); }
   .abono-wa{ margin:0 0 12px; }
@@ -498,7 +519,7 @@ let state = {
   carrito:[], fechaSel:null, slotSel:null, modoEspera:false, modoModificar:null, limiteMsg:'',
   amigos:[],
   buscarDni:'',
-  isAdmin:false, adminTab:'dashboard', filtroAlumno:'',
+  isAdmin:false, adminTab:'dashboard', filtroAlumno:'', filtroAbono:'', abonoGrupo:'todos',
   horariosCopiados:null,
   mostrarNuevoAlumno:false, naNombre:'', naTel:'', naDni:'', naPlan:'', naPerso:'', verOcultos:false, avisoCancelacion:null,
   turnosDiaSel:null, turnosPropuestos:[], turnosCarrito:[],
@@ -1651,7 +1672,7 @@ function renderAdminPin(){
 }
 
 function renderAdmin(){
-  const tabs = [['dashboard','Hoy'], ['agenda','Agenda'], ['horarios','Horarios'], ['alumnos','Alumnos'], ['portada','Portada']];
+  const tabs = [['dashboard','Hoy'], ['agenda','Agenda'], ['horarios','Horarios'], ['alumnos','Alumnos'], ['abonos','Abonos'], ['portada','Portada']];
   const nPendientes = solicitudesPendientes().length;
   const tabsHtml = `<div class="admin-tabs">${tabs.map(([id,label])=>`<button class="admin-tab ${state.adminTab===id?'active':''}" data-tab="${id}">${label}${id==='alumnos' && nPendientes>0 ? ` <span class="tab-badge" title="${nPendientes} solicitud${nPendientes===1?'':'es'} de registro">${nPendientes}</span>` : ''}</button>`).join('')}</div>`;
   let body = '';
@@ -1659,6 +1680,7 @@ function renderAdmin(){
   else if(state.adminTab==='agenda') body = renderAdminAgenda();
   else if(state.adminTab==='horarios') body = renderAdminHorarios();
   else if(state.adminTab==='alumnos') body = renderAdminAlumnos();
+  else if(state.adminTab==='abonos') body = renderAdminAbonos();
   else body = renderAdminPortada();
 
   return `
@@ -1681,8 +1703,15 @@ function renderAdminDashboard(){
   const cumples = cumpleaniosProximos();
   const huecos = huecosLibres(6);
   const nPendientes = solicitudesPendientes().length;
+  const nAvisos = abonosDeAlumnos().filter(x=> x.e.tipo==='abono' && x.e.avisos.length>0).length;
 
   return `
+    ${nAvisos>0 ? `
+      <div class="aviso-solicitudes">
+        <p class="aviso-titulo">${nAvisos===1 ? '1 alumno para avisar' : nAvisos+' alumnos para avisar'}</p>
+        <p class="aviso-texto">Abonos por vencer o vencidos, alumnos sin clases o con clases sin usar.</p>
+        <div class="aviso-acciones"><button class="mini-btn ok" id="btnIrAbonos">Ver abonos</button></div>
+      </div>` : ''}
     ${nPendientes>0 ? `
       <div class="aviso-solicitudes">
         <p class="aviso-titulo">${nPendientes===1 ? '1 persona pidió registrarse' : nPendientes+' personas pidieron registrarse'}</p>
@@ -1888,6 +1917,123 @@ function renderSolicitudesRegistro(){
         </div>`).join('')}
     </div>
   `;
+}
+
+// --- Abonos: tarjeta del profe (solapa Abonos y ficha del alumno) ---
+function textoDias(e){
+  if(e.D<0) return `Venció hace ${-e.D} ${e.D===-1?'día':'días'}`;
+  if(e.D===0) return 'Vence hoy';
+  if(e.D===1) return 'Vence mañana';
+  return `Vence en ${e.D} días`;
+}
+function abonosDeAlumnos(){
+  const hoy = hoyKey();
+  return perfilesAprobados().filter(p=>!alumnoOculto(p.dni)).map(p=>({ p, e: estadoAbono(p, hoy) }));
+}
+function renderAbonoCard(p, e){
+  const nombre = escapeHtml(p.nombre) + (p.apodo ? ` (${escapeHtml(p.apodo)})` : '');
+  const dni = escapeHtml(p.dni);
+  const etiquetas = { vencido:['Vencido','danger'], sinClases:['Sin clases','danger'], porVencer:['Falta poco para pagar','warn'], ultimas:['Últimas clases','warn'], sobran:['Le sobran clases','warn'], ok:['Al día','ok'] };
+  let chip, meta, cuerpo = '', acciones = '';
+  const formFecha = (valor, textoBtn)=> `
+    <div class="abono-nuevo">
+      <label>Fecha de pago <input type="date" class="inp-abono-pago" data-dni="${dni}" value="${valor}"></label>
+      <button class="mini-btn btn-guardar-abono" data-dni="${dni}">${textoBtn}</button>
+    </div>`;
+  if(e.tipo==='sinPlan'){
+    chip = ['Sin plan','gris']; meta = 'Asignale un plan en Alumnos para controlar su abono.';
+  }else if(e.tipo==='sinFecha'){
+    chip = ['Sin fecha de pago','gris'];
+    meta = `${escapeHtml(e.plan)}${e.total!=null ? ' · '+e.total+' clases por abono' : ''}`;
+    cuerpo = `<p class="abono-nota">Hasta que cargues la fecha de pago sigue con el límite por semana de siempre.</p>` + formFecha(hoyKey(), 'Empezar abono');
+  }else{
+    chip = (e.estado==='ok' && e.total==null) ? ['Sin tope','gris'] : etiquetas[e.estado];
+    meta = `${escapeHtml(e.plan)} · pagó el ${fechaCorta(e.pago)} · vence el ${fechaCorta(e.vence)}`;
+    if(e.total!=null){
+      cuerpo = `
+        ${abonoBarra(e, false)}
+        <div class="abono-stats-prof">
+          <span>Asistió <b>${e.A}</b> de ${e.total}</span>
+          <span>Le quedan <b>${e.quedan}</b></span>
+          <span><b>${textoDias(e)}</b></span>
+        </div>
+        <div class="abono-stats">${e.R} reservadas · ${e.disponibles} sin reservar · ${e.S} sin marcar${e.F>0 ? ` · ${e.F} faltó` : ''}</div>`;
+    }else{
+      cuerpo = `<div class="abono-stats-prof"><span><b>${textoDias(e)}</b></span></div>
+        <p class="abono-nota">Sin número de clases definido: se controlan solo las fechas. Podés cargarlo en "Editar".</p>`;
+    }
+    const urgentePago = e.avisos.some(a=> a==='vencido' || a==='sinClases' || a==='porVencer');
+    const mc = mensajeAbonoClases(p, e);
+    acciones = `
+      <div class="abono-acciones">
+        ${mc ? `<a class="mini-btn ${urgentePago?'':'ok'}" href="${waLink(p.telefono, mc)}" target="_blank" rel="noopener">${icon('wa')} Recordar clases</a>` : ''}
+        <a class="mini-btn ${urgentePago?'ok':''}" href="${waLink(p.telefono, mensajeAbonoPago(p, e))}" target="_blank" rel="noopener">${icon('wa')} Avisar pago</a>
+        <button class="mini-btn btn-renovar-abono" data-dni="${dni}">Renovar abono</button>
+      </div>
+      <details class="abono-editar">
+        <summary>Editar</summary>
+        ${formFecha(e.pago, 'Guardar')}
+        <div class="abono-nuevo">
+          <label>Clases del abono <input type="number" min="1" class="inp-abono-clases" data-dni="${dni}" value="${(abonoDe(p.dni)||{}).clases||''}" placeholder="${e.total!=null ? e.total+' (del plan)' : 'ej: 12'}"></label>
+        </div>
+        <p class="abono-nota">Dejá "Clases del abono" vacío para usar las del plan.</p>
+      </details>`;
+  }
+  return `
+    <div class="admin-slot abono-prof" data-dni="${dni}">
+      <div class="abono-prof-head">
+        <div><div class="admin-alumno-name">${nombre}</div><div class="abono-meta">${meta}</div></div>
+        <span class="abono-chip ${chip[1]}">${chip[0]}</span>
+      </div>
+      ${cuerpo}
+      ${acciones}
+    </div>`;
+}
+
+function renderAdminAbonos(){
+  const filtro = state.filtroAbono.trim().toLowerCase();
+  const todas = abonosDeAlumnos();
+  const cuenta = g=> todas.filter(x=>grupoAbono(x.e)===g).length;
+  const grupos = [['todos','Todos',todas.length], ['avisar','Para avisar',cuenta('avisar')], ['renovar','Para renovar',cuenta('renovar')], ['sinAbono','Sin abono',cuenta('sinAbono')]];
+  let filas = state.abonoGrupo==='todos' ? todas : todas.filter(x=>grupoAbono(x.e)===state.abonoGrupo);
+  if(filtro) filas = filas.filter(({p})=> (p.nombre||'').toLowerCase().includes(filtro) || (p.apodo||'').toLowerCase().includes(filtro) || (p.dni||'').includes(filtro));
+  filas = filas.slice().sort((a,b)=> ordenAbono(a.e)-ordenAbono(b.e) || (a.p.nombre||'').localeCompare(b.p.nombre||''));
+  return `
+    <div class="search-box">${icon('search')}<input type="text" id="inpBuscarAbono" placeholder="Buscar por nombre, apodo o DNI" value="${escapeHtml(state.filtroAbono)}"></div>
+    <div class="abono-filtros">${grupos.map(([id,label,n])=>`<button class="abono-filtro ${state.abonoGrupo===id?'activo':''}" data-grupo="${id}">${label} <b>${n}</b></button>`).join('')}</div>
+    ${filas.length===0 ? `<div class="empty-state">No hay alumnos en esta lista.</div>` : filas.map(({p,e})=>renderAbonoCard(p, e)).join('')}
+    <p class="empty-note">El abono dura hasta el mismo día del mes siguiente a la fecha de pago. Las clases salen del plan de cada alumno (se editan en Portada) y se descuentan al reservar. Al renovar, las que sobraban no se acumulan.</p>
+  `;
+}
+
+function bindAbonoCardEvents($, $$){
+  $$('.btn-guardar-abono').forEach(btn=>{
+    btn.onclick = protegido(btn, async ()=>{
+      const dni = btn.dataset.dni;
+      const card = btn.closest('.abono-prof');
+      const pago = card.querySelector('.inp-abono-pago').value;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(pago)){ alert('Elegí la fecha de pago.'); return; }
+      if(sumarUnMes(pago) < hoyKey() && !confirm(`Con esa fecha el abono ya está vencido (venció el ${fechaCorta(sumarUnMes(pago))}) y el alumno no va a poder reservar hasta que lo renueves.\n\n¿Guardar igual?`)) return;
+      const clasesEl = card.querySelector('.inp-abono-clases');
+      const clases = clasesEl && clasesEl.value!=='' ? Math.max(1, parseInt(clasesEl.value)||0) : null;
+      const datos = { pago };
+      if(clases) datos.clases = clases;
+      if(await setAbono(dni, datos)) render();
+    }, 'Guardando…');
+  });
+  $$('.btn-renovar-abono').forEach(btn=>{
+    btn.onclick = ()=>{
+      const p = perfiles[btn.dataset.dni]; if(!p) return;
+      const hoy = hoyKey();
+      if(!confirm(`¿Renovar el abono de ${p.nombre}?\n\nEl abono nuevo va del ${fechaCorta(hoy)} al ${fechaCorta(sumarUnMes(hoy))} y se reinician sus clases. Las que le sobraban del anterior no se acumulan.`)) return;
+      protegido(btn, async ()=>{
+        const datos = { pago: hoy };
+        const propias = (abonoDe(p.dni)||{}).clases;
+        if(propias) datos.clases = propias;
+        if(await setAbono(p.dni, datos)) render();
+      }, 'Renovando…')();
+    };
+  });
 }
 
 function renderAdminAlumnos(){
@@ -2220,6 +2366,7 @@ function renderAdminAlumnoFicha(){
     <div class="pad">
       <p class="section-eyebrow">Ficha del alumno</p>
       <h2 class="section-title">${escapeHtml(a.nombre)}${a.apodo?' <span style="color:var(--accent-2);">('+escapeHtml(a.apodo)+')</span>':''}</h2>
+      ${renderAbonoCard(a, estadoAbono(a, hoyKey()))}
       ${tabsHtml}
       ${body}
     </div>
@@ -2681,6 +2828,8 @@ function bindEvents(){
 
   if(state.view==='admin'){
     $$('.admin-tab').forEach(t=> t.onclick = async ()=>{ state.adminTab = t.dataset.tab; state.horariosCopiados=null; state.avisoCancelacion=null; state.avisoAprobacion=null; await loadData(); render(); });
+    const btnIrAbonos = $('#btnIrAbonos');
+    if(btnIrAbonos) btnIrAbonos.onclick = async ()=>{ state.adminTab='abonos'; state.abonoGrupo='todos'; state.filtroAbono=''; await loadData(); render(); };
     const btnIrSolicitudes = $('#btnIrSolicitudes');
     if(btnIrSolicitudes) btnIrSolicitudes.onclick = async ()=>{ state.adminTab='alumnos'; state.verOcultos=false; state.filtroAlumno=''; await loadData(); render(); };
 
@@ -2817,6 +2966,13 @@ function bindEvents(){
       };
       const btnDescartarCopia = $('#btnDescartarCopia');
       if(btnDescartarCopia) btnDescartarCopia.onclick = ()=>{ state.horariosCopiados=null; render(); };
+    }
+
+    if(state.adminTab==='abonos'){
+      bindAbonoCardEvents($, $$);
+      const buscarAb = $('#inpBuscarAbono');
+      if(buscarAb) buscarAb.oninput = e=>{ state.filtroAbono = e.target.value; const pos = e.target.selectionStart; render(); const nuevo = $('#inpBuscarAbono'); if(nuevo){ nuevo.focus(); nuevo.setSelectionRange(pos, pos); } };
+      $$('.abono-filtro').forEach(b=> b.onclick = ()=>{ state.abonoGrupo = b.dataset.grupo; render(); });
     }
 
     if(state.adminTab==='alumnos'){
@@ -3029,6 +3185,7 @@ function bindEvents(){
   }
 
   if(state.view==='adminAlumno'){
+    bindAbonoCardEvents($, $$);
     $$('.admin-tab').forEach(t=> t.onclick = ()=>{ state.adminAlumnoTab = t.dataset.atab; render(); });
     if(state.adminAlumnoTab==='turnos') bindTurnosAlumnoEvents($, $$, state.adminAlumnoDni);
     if(state.adminAlumnoTab==='pagos') bindComprobanteEvents($$);
