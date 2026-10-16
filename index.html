@@ -1108,7 +1108,9 @@ function avisosAlumno(e){
     ultimas:   [`info`,   `${q===1 ? 'Te queda 1 clase' : `Te quedan ${q} clases`} de tu abono.`],
     sobran:    [`info`,   `${diasDeAbono(e)} y te quedan ${q} clases. ¡Aprovechalas!`],
   };
-  return e.avisos.slice(0,2).map(a=>({ nivel:texto[a][0], texto:texto[a][1] }));
+  // "Le sobran clases" ya dice los días que quedan: no se repite el aviso de "quedan N días".
+  const lista = e.avisos.includes('sobran') ? e.avisos.filter(a=> a!=='porVencer') : e.avisos;
+  return lista.slice(0,2).map(a=>({ nivel:texto[a][0], texto:texto[a][1] }));
 }
 function pideRenovacion(e){ return !!e && e.tipo==='abono' && e.avisos.some(a=> a==='vencido' || a==='sinClases'); }
 
@@ -1356,8 +1358,8 @@ function abonoBarra(e, alumno){
   return `<div class="abono-bar">${segs.filter(s=>s[1]>0).map(s=>`<span class="seg-${s[0]}" style="width:${w(s[1])}%"></span>`).join('')}</div>`;
 }
 // Avisos del abono para el alumno (hasta 2) y, si corresponde, el botón de WhatsApp para pedir la renovación.
-function abonoAvisosHtml(perfil, e, forzarWa){
-  const avisos = avisosAlumno(e).map(a=>`<div class="abono-aviso ${a.nivel}">${escapeHtml(a.texto)}</div>`).join('');
+function abonoAvisosHtml(perfil, e, forzarWa, soloUrgentes){
+  const avisos = avisosAlumno(e).filter(a=> !soloUrgentes || a.nivel==='danger').map(a=>`<div class="abono-aviso ${a.nivel}">${escapeHtml(a.texto)}</div>`).join('');
   const wa = (CONFIG.whatsapp && (pideRenovacion(e) || forzarWa))
     ? `<a class="wa-btn abono-wa" href="${waLink(CONFIG.whatsapp, mensajeRenovarAlumno(perfil.nombre, perfil.dni))}" target="_blank" rel="noopener">${icon('wa')} Pedir renovación por WhatsApp</a>` : '';
   return avisos + wa;
@@ -1377,6 +1379,11 @@ function renderAbonoAlumno(perfil){
 
 function renderDia(){
   const fechas = proximasFechas(14);
+  // Al entrar ya viene elegido el primer día con horarios todavía abiertos (si no, la pantalla quedaba vacía).
+  if(!state.fechaSel && fechas.length>0){
+    const abierto = fechas.find(f=> (schedule[f.dia]||[]).some(s=> !slotCerrado(f.key, s.hora)));
+    state.fechaSel = (abierto || fechas[0]).key;
+  }
   const chips = fechas.map(f=>{
     const lb = labelFecha(f.dateObj);
     const activo = state.fechaSel===f.key;
@@ -1395,7 +1402,7 @@ function renderDia(){
         <p class="plan-banner-plan">${estado.plan || 'Sin plan asignado'}</p>
         <p class="plan-banner-msg">${estado.texto}</p>
       </div>
-      ${estado.abono ? abonoAvisosHtml(perfil, estado.abono, estado.bloqueado) : ''}
+      ${estado.abono ? abonoAvisosHtml(perfil, estado.abono, estado.bloqueado, true) : ''}
     `;
     if(state.limiteMsg){
       banner += `<div class="form-alert" style="display:block;">${state.limiteMsg}</div>`;
