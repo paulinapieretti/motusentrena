@@ -2054,6 +2054,17 @@ function renderSolicitudesRegistro(){
   `;
 }
 
+// Planes que se pueden elegir: los que tienen nombre (un plan con el nombre vacío se considera sacado).
+function planesDisponibles(){ return Object.entries(CONFIG.planes).filter(([,p])=> (p.nombre||'').trim()!==''); }
+// Asigna (o saca) el plan de un alumno. Primer plan de un alumno sin abono: el abono arranca hoy (la fecha se corrige en Abonos).
+async function asignarPlan(p, planId){
+  const antes = p.plan;
+  p.plan = planId || null;
+  if(!(await savePerfiles([p]))){ p.plan = antes; return false; }
+  if(p.plan && !antes && !abonoDe(p.dni)) await setAbono(p.dni, { pago: hoyKey() });
+  return true;
+}
+
 // --- Abonos: tarjeta del profe (solapa Abonos y ficha del alumno) ---
 function textoDias(e){
   if(e.D<0) return `Venció hace ${-e.D} ${e.D===-1?'día':'días'}`;
@@ -2076,7 +2087,13 @@ function renderAbonoCard(p, e){
       <button class="mini-btn btn-guardar-abono" data-dni="${dni}">${textoBtn}</button>
     </div>`;
   if(e.tipo==='sinPlan'){
-    chip = ['Sin plan','gris']; meta = 'Asignale un plan en Alumnos para controlar su abono.';
+    chip = ['Sin plan','gris']; meta = 'Elegí un plan para controlar su abono.';
+    cuerpo = `
+      <div class="abono-nuevo">
+        <label>Plan <select class="sel-plan-abono" data-dni="${dni}"><option value="">Elegir plan…</option>${planesDisponibles().map(([id,pl])=>`<option value="${id}">${escapeHtml(pl.nombre)}${pl.clasesPorAbono>0 ? ' · '+pl.clasesPorAbono+' clases' : ''}</option>`).join('')}</select></label>
+        <button class="mini-btn btn-asignar-plan" data-dni="${dni}">Asignar plan</button>
+      </div>
+      <p class="abono-nota">Al asignarlo, el abono arranca hoy (después podés cambiar la fecha de pago).</p>`;
   }else if(e.tipo==='sinFecha'){
     chip = ['Sin fecha de pago','gris'];
     meta = `${escapeHtml(e.plan)}${e.total!=null ? ' · '+e.total+' clases por abono' : ''}`;
@@ -2142,6 +2159,15 @@ function renderAdminAbonos(){
 }
 
 function bindAbonoCardEvents($, $$){
+  $$('.btn-asignar-plan').forEach(btn=>{
+    btn.onclick = protegido(btn, async ()=>{
+      const p = perfiles[btn.dataset.dni];
+      const sel = btn.closest('.abono-prof').querySelector('.sel-plan-abono');
+      if(!p) return;
+      if(!sel.value){ alert('Elegí un plan.'); return; }
+      if(await asignarPlan(p, sel.value)) render();
+    }, 'Asignando…');
+  });
   $$('.btn-ir-asistencia').forEach(btn=>{
     btn.onclick = ()=>{
       state.adminAlumnoDni = btn.dataset.dni; state.adminAlumnoTab = 'asistencia';
@@ -2189,7 +2215,7 @@ function renderAdminAlumnos(){
 
   const searchBox = `<div class="search-box">${icon('search')}<input type="text" id="inpBuscarAlumno" placeholder="Buscar por nombre, apodo, DNI o teléfono" value="${escapeHtml(state.filtroAlumno)}"></div>`
     + (totalOcultos>0 ? `<div style="margin:-6px 0 14px;"><button class="tiny-btn" id="btnVerOcultos">${verOcultos ? '← Volver a los alumnos' : 'Ver alumnos ocultos ('+totalOcultos+')'}</button></div>` : '');
-  const opcionesPlan = [['','Sin plan'], ...Object.entries(CONFIG.planes).map(([id,p])=>[id,p.nombre])];
+  const opcionesPlan = [['','Sin plan'], ...planesDisponibles().map(([id,p])=>[id,p.nombre])];
 
   const bloqueNuevo = state.mostrarNuevoAlumno ? `
     <div class="admin-slot" style="margin-bottom:14px;">
@@ -3183,11 +3209,7 @@ function bindEvents(){
         sel.onchange = async ()=>{
           const p = perfiles[sel.dataset.dni];
           if(p){
-            const teniaPlan = !!p.plan;
-            p.plan = sel.value || null;
-            await savePerfiles([p]);
-            // Primer plan de un alumno sin abono: el abono arranca hoy (la fecha se puede cambiar en Abonos).
-            if(p.plan && !teniaPlan && !abonoDe(p.dni)) await setAbono(p.dni, { pago: hoyKey() });
+            await asignarPlan(p, sel.value);
             render();
           }
         };
