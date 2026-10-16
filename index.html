@@ -133,6 +133,8 @@
   .abono-filtro{ background:none; border:1px solid var(--border-strong); color:var(--muted); border-radius:999px; padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-body); }
   .abono-filtro b{ font-weight:800; margin-left:4px; }
   .abono-filtro.activo{ border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .rutina-fotos{ margin-bottom:22px; }
+  .rutina-fotos-title{ font-family:var(--font-display); font-size:19px; font-weight:700; margin:0 0 6px; }
   .abono-aviso{ padding:9px 12px; border-radius:9px; font-size:13px; line-height:1.5; margin-bottom:10px; background:var(--accent-soft); border:1px solid rgba(169,184,255,0.22); color:var(--accent); }
   .abono-aviso.danger{ background:var(--warn-soft); border-color:rgba(255,133,119,0.32); color:var(--warn); }
   .abono-wa{ margin:0 0 12px; }
@@ -655,7 +657,22 @@ async function subirComprobante(file, dni, subidoPor){
   comprobantes.push({ id:row.id, dni, url:row.url, subidoPor, ts:row.ts });
   return row;
 }
-function comprobantesDe(dni){ return comprobantes.filter(c=>c.dni===dni).sort((a,b)=>b.ts-a.ts); }
+// Las fotos de la rutina en papel se guardan junto a los comprobantes, marcadas con subido_por = 'rutina-…'
+// (así no hace falta tocar la base), y no se mezclan con los pagos.
+function esFotoRutina(c){ return String(c.subidoPor||'').startsWith('rutina'); }
+function comprobantesDe(dni){ return comprobantes.filter(c=>c.dni===dni && !esFotoRutina(c)).sort((a,b)=>b.ts-a.ts); }
+function fotosRutinaDe(dni){ return comprobantes.filter(c=>c.dni===dni && esFotoRutina(c)).sort((a,b)=>b.ts-a.ts); }
+async function borrarFotoRutina(id){
+  const c = comprobantes.find(x=>x.id===id);
+  if(!c) return false;
+  const { error } = await sb.from('comprobantes').delete().eq('id', id);
+  if(error){ console.error('Error borrando la foto:', error); alert('No se pudo borrar la foto: '+error.message); return false; }
+  comprobantes = comprobantes.filter(x=>x.id!==id);
+  const marca = '/comprobantes/';
+  const i = (c.url||'').indexOf(marca);
+  if(i>=0) sb.storage.from('comprobantes').remove([decodeURIComponent(c.url.slice(i+marca.length))]).catch(()=>{});
+  return true;
+}
 
 // --- Fotos de portada ---
 async function subirFotoPortada(file){
@@ -1556,6 +1573,44 @@ function renderProgresoLista(dni){
   `).join('');
 }
 
+// Foto de la rutina en papel: la suben el profe o el alumno; borrarla solo lo hace el profe.
+function renderRutinaFotos(dni, contexto){
+  const fotos = fotosRutinaDe(dni);
+  const esProfe = contexto==='entrenador';
+  return `
+    <div class="rutina-fotos">
+      <h3 class="rutina-fotos-title">Rutina en papel (foto)</h3>
+      <p class="empty-note" style="margin:0 0 10px;">${esProfe ? 'Subí una foto de la hoja que le entregaste, por si la pierde.' : 'Guardá una foto de tu hoja de rutina, por si la perdés.'}</p>
+      <div class="field">
+        <label for="inpRutinaFoto_${contexto}">Subir foto</label>
+        <input type="file" id="inpRutinaFoto_${contexto}" accept="image/*" multiple class="inp-rutina-foto" data-dni="${escapeHtml(dni)}" data-contexto="${contexto}">
+      </div>
+      ${fotos.length===0 ? `<p class="empty-note">Todavía no hay fotos de la rutina.</p>` : fotos.map(c=>`
+        <div class="comprobante-row">
+          <a href="${c.url}" target="_blank" rel="noopener"><img src="${c.url}" class="comprobante-thumb" alt="Foto de la rutina"></a>
+          <span style="font-size:12.5px; color:var(--muted); flex:1;">${new Date(c.ts).toLocaleDateString('es-AR')} · subida por ${c.subidoPor==='rutina-entrenador'?'el profesor':'el alumno'}</span>
+          ${esProfe ? `<button class="tiny-btn btn-borrar-rutina-foto" data-id="${c.id}">Borrar</button>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+function bindRutinaFotoEvents($$){
+  $$('.inp-rutina-foto').forEach(inp=>{
+    inp.onchange = async ()=>{
+      const archivos = [...inp.files];
+      if(archivos.length===0) return;
+      inp.disabled = true;
+      for(const f of archivos){ if(!(await subirComprobante(f, inp.dataset.dni, 'rutina-'+(inp.dataset.contexto==='entrenador'?'entrenador':'alumno')))) break; }
+      render();
+    };
+  });
+  $$('.btn-borrar-rutina-foto').forEach(btn=>{
+    btn.onclick = async ()=>{
+      if(!confirm('¿Estás seguro de borrar esta foto de la rutina?\n\nNo se puede deshacer.')) return;
+      if(await borrarFotoRutina(btn.dataset.id)) render();
+    };
+  });
+}
+
 function renderComprobantesLista(dni, contexto){
   const propios = comprobantesDe(dni);
   return `
@@ -1638,6 +1693,9 @@ function renderMiSemana(){
         <div class="week-group">
           <h3 class="week-group-title">Comprobantes de pago</h3>
           ${renderComprobantesLista(dni, 'alumno')}
+        </div>
+        <div class="week-group">
+          ${renderRutinaFotos(dni, 'alumno')}
         </div>
         <div class="week-group">
           <h3 class="week-group-title">Mi progreso</h3>
@@ -2360,7 +2418,7 @@ function renderAdminAlumnoFicha(){
   let body='';
   if(state.adminAlumnoTab==='turnos') body = renderAdminTurnosAlumno(dni);
   else if(state.adminAlumnoTab==='pagos') body = renderComprobantesLista(dni,'entrenador');
-  else if(state.adminAlumnoTab==='rutina') body = renderRutinaEditor({dni});
+  else if(state.adminAlumnoTab==='rutina') body = renderRutinaFotos(dni,'entrenador') + renderRutinaEditor({dni});
   else body = renderRegistroYProgreso(dni);
 
   return `
@@ -2816,6 +2874,7 @@ function bindEvents(){
         render();
       };
     });
+    bindRutinaFotoEvents($$);
   }
 
   if(state.view==='adminPin'){
@@ -3191,7 +3250,7 @@ function bindEvents(){
     $$('.admin-tab').forEach(t=> t.onclick = ()=>{ state.adminAlumnoTab = t.dataset.atab; render(); });
     if(state.adminAlumnoTab==='turnos') bindTurnosAlumnoEvents($, $$, state.adminAlumnoDni);
     if(state.adminAlumnoTab==='pagos') bindComprobanteEvents($$);
-    if(state.adminAlumnoTab==='rutina') bindRutinaEditorEvents($, $$, { dni: state.adminAlumnoDni });
+    if(state.adminAlumnoTab==='rutina'){ bindRutinaFotoEvents($$); bindRutinaEditorEvents($, $$, { dni: state.adminAlumnoDni }); }
     if(state.adminAlumnoTab==='progreso'){
       const selDia = $('#selRegistroDia');
       if(selDia) selDia.onchange = e=>{ state.registroDiaId = e.target.value; state.registroExtra=[]; render(); };
